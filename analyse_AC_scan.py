@@ -6,16 +6,21 @@ from ctapipe.io.camera import find_neighbor_pixels
 from astropy import units as u
 
 from ctapipe import visualization
-from ctapipe.calib import pedestals
+from ctapipe.calib import pedestals as pedestal_calib
 from ctapipe.calib.camera import integrators
 import numpy as np
 from ctapipe.io import zfits
 from matplotlib.ticker import LogFormatter
 # Get CTS
 from cts import cameratestsetup as cts
+import scipy.stats
+from scipy import optimize
+
+from scipy.stats import norm
+from numpy import linspace
 
 
-availableSector = [3]
+availableSector = [1]
 availableBoard = [0,1,2,3,4,5,6,7,8,9]
 # Define cts
 cts = cts.CTS('/data/software/CTS/config/cts_config_0.cfg',
@@ -35,21 +40,54 @@ for pix in cts.camera.Pixels:
         pix_badid.append(True)
         #pixels.append(pix)
     else :
-        pix_x.append(-100.)
-        pix_y.append(-100.)
+        pix_x.append(pix.center[0])
+        pix_y.append(pix.center[1])
         pix_id.append(pix.ID)
         pix_badid.append(False)
 
 pix_badid= np.array(pix_badid)
 # pixels = list(self.cts.pixel_to_led['DC'].keys())
-# pixels.sort()
-#pix_x = np.array([pix.center[0] for pix in pixels])
+# pixels.sort()ter[0] for pix in pixels])
 #pix_y = np.array([pix.center[1] for pix in pixels])
 #pix_id = np.array([pix.ID for pix in pixels])
 neighbors_pix = find_neighbor_pixels(pix_x, pix_y, 30.)
 geom = CameraGeometry(0, pix_id, pix_x * u.mm, pix_y * u.mm, np.ones((1296)) * 400., neighbors_pix, 'hexagonal')
-formatter = LogFormatter(10, labelOnlyBase=False)
+formatter = LogFormatter(10)
+#pix_x = np.array([pix.cen, labelOnlyBase=False)
 
+def Gauss0(x, *param):
+    A , sigma = param
+    return A/sigma/np.sqrt(2.*np.pi)*np.exp(-(x)**2/(2.*sigma**2))
+
+def fitGauss0(data):
+    hist , bins = np.histogram(data,bins=np.arange(-10.5, 0.5, 1),density=True)
+    coeff, var_matrix = optimize.curve_fit(Gauss0, xdata=np.arange(-10., 0., 1),ydata=hist,p0=np.array([1.,2.]) )
+    return coeff[1]
+
+
+fitGauss0_Vect = np.vectorize(fitGauss0)
+
+'''
+def create_halfhist(data):
+    data[data<1]
+
+
+
+def fit_gaussian(data):
+    mu, std = norm.fit(data)
+
+
+
+# Define model function to be used to fit to the data above:
+def gauss0(x, *p):
+    A, sigma = p
+    return A*numpy.exp(-(x)**2/(2.*sigma**2))
+
+# p0 is the initial guess for the fitting coefficients (A, mu and sigma above)
+p0 = [1000., 1]
+
+coeff, var_matrix = curve_fit(gauss0, bin_centres, hist, p0=p0)
+'''
 
 plt.figure(0)
 displayType = []
@@ -59,125 +97,93 @@ displayType = []
 inputfile_reader = zfits.zfits_event_source(url="/data/datasets/CTA/CameraDigicam@localhost.localdomain_0_000.66.fits.fz"
                                                 , data_type='r1', max_events=1000)
 
-displayType.append(visualization.CameraDisplay(geom, title='Pedestals', norm='lin', cmap='coolwarm'))
+plt.subplot(2, 3, 1)
+displayType.append(visualization.CameraDisplay(geom, title='Pedestals Average', norm='lin', cmap='coolwarm'))
 displayType[-1].add_colorbar()
 
-plt.subplot(1, 1, 1)
-pedestalValues = None
+plt.subplot(2, 3, 2)
+displayType.append(visualization.CameraDisplay(geom, title='Pedestals Mode', norm='lin', cmap='coolwarm'))
+displayType[-1].add_colorbar()
+
+plt.subplot(2, 3, 3)
+displayType.append(visualization.CameraDisplay(geom, title='Sigma_e', norm='lin', cmap='coolwarm'))
+displayType[-1].add_colorbar()
+
+plt.ion()
+pedestals = {}
+
+nevt=0
 for event in inputfile_reader:
+    nevt+=1
+    if nevt>1500/50:break
     for telid in event.r1.tels_with_data :
         data = np.array(list(event.r1.tel[telid].adc_samples.values()))
         # pedestal evaluation
-        peds, pedvars = pedestals.calc_pedestals_from_traces(data, 0, 50)
-        print(peds)
-        print(peds.shape)
-        if not pedestalValues: pedestalValues = peds.reshape(1296,1)
-        else : pedestalValues = np.append(pedestalValues,peds.reshape(1296,1))
+        peds, pedvars = pedestal_calib.calc_pedestals_from_traces(data, 0, 50)
+        if 'mean' not in pedestals: pedestals['mean'] = peds.reshape(1296,1)
+        else : pedestals['mean'] = np.append(pedestals['mean'], peds.reshape(1296, 1), axis=1)
+        # keep all ADCs
+        if 'mode' not in pedestals: pedestals['mode']= data
+        else: pedestals['mode']=np.append(pedestals['mode'],data,axis = 1)
+        
 
-pedestals = np.mean(a,axis=1)
-displayType[-1].image = pedestals
+pedestals['mean'] = np.mean(pedestals['mean'], axis=1)
+pedestals['mean'] = np.where(pix_badid, pedestals['mean'], np.min(np.extract(pix_badid, pedestals['mean'])))
 
-print(pedestals)
+pedestals['meanUnique']  = np.mean(pedestals['mode'], axis=1)
+pedestals['meanUnique']  = np.where(pix_badid, pedestals['meanUnique'], np.min(np.extract(pix_badid, pedestals['meanUnique'])))
+pedestals['mode'] =   scipy.stats.mode(pedestals['mode'], axis= 1).mode.reshape(1296)
+pedestals['mode'] =   np.where(pix_badid,pedestals['mode'],np.min(np.extract(pix_badid, pedestals['mode'])))
+displayType[0].image = pedestals['mean']
+displayType[1].image = pedestals['mode']
 plt.show()
 
-'''
 
-plt.figure(0)
-displayType = []
-plt.subplot(2, 3, 1)
-displayType.append(visualization.CameraDisplay(geom, title='Pedestal Variation log', norm='lin', cmap='coolwarm'))
-displayType[-1].add_colorbar()
-plt.subplot(2, 3, 2)
-displayType.append(visualization.CameraDisplay(geom, title='Pedestals', norm='lin', cmap='coolwarm'))
-displayType[-1].add_colorbar()
-plt.subplot(2, 3, 3)
-displayType.append(visualization.CameraDisplay(geom, title='Pedestal With Low var', norm='lin', cmap='coolwarm'))
-displayType[-1].add_colorbar()
-plt.subplot(2, 3, 5)
-displayType.append(visualization.CameraDisplay(geom, title='Data ped subtracted', norm='lin', cmap='coolwarm'))
-#v = np.linspace(0, 300, 300, endpoint=True)
-displayType[-1].add_colorbar()
+dataset = {}
+inputfile_reader = zfits.zfits_event_source(url="/data/datasets/CTA/CameraDigicam@localhost.localdomain_0_000.66.fits.fz"
+                                                , data_type='r1', max_events=1000)
+nevt = 0
 
-plt.subplot(2, 3, 6)
-displayType.append(
-    visualization.CameraDisplay(geom, title='Data without pedestal subtraction', norm='lin', cmap='coolwarm'))
-displayType[-1].add_colorbar()
-
-logVect = np.vectorize(np.log10)
-
-
-def cutoff(x):
-    y = 1.
-    if x <1000 : y = 0.3#np.log10(x) < -1000.: y = 0.
-    return y
-
-
-def cutoffBool(x):
-    y = True
-    if x<1000 : y = False #np.log10(x) < -1000.: y = False
-    return y
-
-
-
-cutoffVect = np.vectorize(cutoff)
-cutoffBoolVect = np.vectorize(cutoffBool)
-plt.ion()
-# "/data/datasets/CameramyCamera_1_000.fits.fz"
-min_evtcounter = 0
-evt_counter = 0
 for event in inputfile_reader:
-    evt_counter +=1
-    if evt_counter < min_evtcounter : continue
-    for telid in (event.r1.tels_with_data if datatype != 'MC' else event.dl0.tels_with_data):
-        data = np.array(list(event.r1.tel[telid].adc_samples.values() if datatype != 'MC' else event.dl0.tel[
-            telid].adc_samples.values()))
-        if datatype == 'MC' and data.shape[1] != 1296: continue
-        # pedestal subtraction
-        peds, pedvars = pedestals.calc_pedestals_from_traces(data, 0, 50)
-        #print (np.max(peds))
-        # select only low variation pedestals
-        pedsCut = np.multiply(cutoffVect(peds), peds)
-        pedsCut2 = np.multiply(cutoffVect(peds), peds)
-        lowVarPed = np.extract(cutoffBoolVect(peds), peds)
+    nevt+=1
+    if nevt>100: break
+    for telid in event.r1.tels_with_data :
+        #print('telID',telid,'nevt',nevt)
+        data = np.array(list(event.r1.tel[telid].adc_samples.values()))
+        #print(scipy.stats.mode(data[10]).mode,pedestals['mode'][10])
+        adcs = np.subtract(data,pedestals['mode'].reshape(1296,1))
+        #print(adcs[18])
+        #adcsTest = np.subtract(data.T,np.zeros(pedestals['mode'].shape)).T
+        #print('Test',adcsTest[18])
+        #print('Real',data[18])
+        if 'adcs' not in dataset:
+            dataset['adcs'] = adcs
+        else:
+            dataset['adcs'] = np.append(dataset['adcs'],adcs,axis = 1)
 
-        pedestalAvg = np.mean(lowVarPed, axis=0)
-        #
-        print (pedestalAvg,data[245])
-        nsamples = event.r1.tel[telid].num_samples if datatype != 'MC' else event.dl0.tel[telid].num_samples
-        # data_ped = data - np.atleast_3d(ped / nsamples)
+#dataset['sigma_e']= fitGauss0_Vect(dataset['adcs'])
+#displayType[1].image = dataset['sigma_e']
 
-        # data_ped = np.array([data_ped[0], data_ped[0]])  # Test LG functionality
-        params = {"integrator": "nb_peak_integration",
-                  "integration_window": [50, 1],
-                  "integration_sigamp": [2, 4],
-                  "integration_lwt": 0}
+#sigma_e = fitGauss0_Vect(dataset['adcs'])
+#print(sigma_e[10])
+plt.subplot(2, 3, 4)
+npix = 0
+for pix,valid in enumerate(pix_badid):
+    if not valid: continue
+    if np.std(dataset['adcs'][pix])>10:continue
 
-        data = data if datatype == 'MC' else np.array([data])  # Test LG functionality
-        data_peds = data - pedestalAvg
+    hist , bins = np.histogram(dataset['adcs'][pix],bins=np.arange(-10.5, 0.5, 1),density=False)
 
-        integration, window, peakpos = integrators.simple_integration(data_peds, params)
-        integrationData, windowD, peakposD = integrators.simple_integration(data, params)
+    width = (bins[1] - bins[0])
+    h = plt.hist(dataset['adcs'][pix],bins=np.arange(-10.5, 40.5, 1))
+    coeff, var_matrix = optimize.curve_fit(Gauss0, xdata=np.arange(-10., 0., 1),ydata=hist,
+                                           p0=np.array([100.,2.]) )#,bounds=([0.,1e-8], [1000.,2.]))
+    print(coeff)
+    x = np.linspace(-10, 0,num=100)
+    h1 = plt.plot(x, Gauss0(x,coeff[0],coeff[1]), lw=2)
+    plt.show()
+    v = input('type')
+    npix+=1
+    if npix> 10 : break
 
-        displayType[0].image = logVect(pedvars)
-        displayType[1].image = peds
-        displayType[2].image = pedsCut
-        plt.subplot(2, 3, 4)
-        plt.hist(lowVarPed, bins=np.arange(1800, 2300, 1))
-        plt.xlim([1800, 2300])
-        plt.ylim([0, 200])
-
-        plt.xscale('log')
-        plt.xscale('log')
-        test = np.ones((1296),dtype='int')*25
-        print('orig',integrationData[0][245])
-        print(np.min(np.extract(pix_badid, integrationData[0])))
-        pedsubValues = np.where(pix_badid,integrationData[0],np.min(np.extract(pix_badid, integrationData[0])))
-        print('filered',pedsubValues[245])
-
-        displayType[3].image = integration[0]
-        displayType[4].image = pedsubValues
-
-        plt.show()
-        var = input("Press enter for next event")
-
-'''
+print('lendata2',dataset['adcs'][10].shape)

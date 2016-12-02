@@ -148,6 +148,7 @@ for event in inputfile_reader:
         print('orig',integrationData[0][245])
         print(np.min(np.extract(pix_badid, integrationData[0])))
         pedsubValues = np.where(pix_badid,integrationData[0],np.min(np.extract(pix_badid, integrationData[0])))
+
         print('filered',pedsubValues[245])
 
         displayType[3].image = integration[0]
