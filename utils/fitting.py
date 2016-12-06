@@ -20,7 +20,8 @@ def errfunc_hist(fit_func, p, x, y ):
     :param y: y
     :return: the residual
     """
-    y_err = np.vectorize(get_poisson_err)( y )
+    y_err=np.sqrt(y)
+    y_err[y_err == 0] = 1
     return (y - fit_func(p, x)) / y_err
 
 def gaussian( p, x):
@@ -57,12 +58,19 @@ def multi_gaussian( p, x):
     gaus3 = p[5] / (np.sqrt(p[1]**2+(3*p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*2+p[3])) ** 2 / (2. * (p[1]**2+(3*p[2])**2)))
     gaus4 = p[6] / (np.sqrt(p[1]**2+(4*p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*3+p[3])) ** 2 / (2. * (p[1]**2+(4*p[2])**2)))
     """
-
+    """
     gaus1 = p[0] / (p[1]) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-p[8]) ** 2 / (2. * (p[1]**2)))
     gaus2 = p[4] / (np.sqrt(p[1]**2+(2*p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*1+p[8])) ** 2 / (2. * (p[1]**2+(2*p[2])**2)))
     gaus3 = p[5] / (np.sqrt(p[1]**2+(3*p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*2+p[8])) ** 2 / (2. * (p[1]**2+(3*p[2])**2)))
     gaus4 = p[6] / (np.sqrt(p[1]**2+(4*p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*3+p[8])) ** 2 / (2. * (p[1]**2+(4*p[2])**2)))
     gaus5 = p[7] / (np.sqrt(p[1]**2+(4*p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*4+p[8])) ** 2 / (2. * (p[1]**2+(5*p[2])**2)))
+    """
+    # gaussian at 1
+    gaus1 = p[0] / (p[1]) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-p[8]) ** 2 / (2. * (p[1]**2)))
+    gaus2 = p[4] / (np.sqrt(p[1]**2+2*(p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*1+p[8])) ** 2 / (2. * (p[1]**2+2*(p[2])**2)))
+    gaus3 = p[5] / (np.sqrt(p[1]**2+3*(p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*2+p[8])) ** 2 / (2. * (p[1]**2+3*(p[2])**2)))
+    gaus4 = p[6] / (np.sqrt(p[1]**2+4*(p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*3+p[8])) ** 2 / (2. * (p[1]**2+4*(p[2])**2)))
+    gaus5 = p[7] / (np.sqrt(p[1]**2+5*(p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*4+p[8])) ** 2 / (2. * (p[1]**2+5*(p[2])**2)))
 
     return gaus1+gaus2+gaus3+gaus4+gaus5
 
@@ -76,13 +84,13 @@ def multi_gaussian_with0( p, x):
     :return:
     """
     gaus0 = p[0] / (p[9]) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[7])) ** 2 / (2. * (p[9]**2)))
+    gaus1 = p[4] / (np.sqrt(p[1]**2+1*(p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]+p[7]+p[8])) ** 2 / (2. * (p[1]**2+1*(p[2])**2)))
+    gaus2 = p[5] / (np.sqrt(p[1]**2+2*(p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*2+p[7]+p[8])) ** 2 / (2. * (p[1]**2+2*(p[2])**2)))
+    gaus3 = p[6] / (np.sqrt(p[1]**2+3*(p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*3+p[7]+[p[8]])) ** 2 / (2. * (p[1]**2+3*(p[2])**2)))
+    gaus4 = p[10] / (np.sqrt(p[1]**2+4*(p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*4+p[7]+[p[8]])) ** 2 / (2. * (p[1]**2+4*(p[2])**2)))
+    gaus5 = p[11] / (np.sqrt(p[1]**2+5*(p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*5+p[7]+[p[8]])) ** 2 / (2. * (p[1]**2+5*(p[2])**2)))
 
-    gaus1 = p[4] / (np.sqrt(p[1]**2+(1*p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]+p[7]+p[8])) ** 2 / (2. * (p[1]**2+(1*p[2])**2)))
-    gaus2 = p[5] / (np.sqrt(p[1]**2+(2*p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*2+p[7]+p[8])) ** 2 / (2. * (p[1]**2+(2*p[2])**2)))
-    gaus3 = p[6] / (np.sqrt(p[1]**2+(3*p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*3+p[7]+[p[8]])) ** 2 / (2. * (p[1]**2+(3*p[2])**2)))
-    gaus4 = p[10] / (np.sqrt(p[1]**2+(4*p[2])**2)) / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x)-(p[3]*4+p[7]+[p[8]])) ** 2 / (2. * (p[1]**2+(4*p[2])**2)))
-
-    return gaus0+gaus1+gaus2+gaus3+gaus4
+    return gaus0+gaus1+gaus2+gaus3+gaus4+gaus5
 
 
 
@@ -91,6 +99,8 @@ def multi_gaussian_residual( p, x, y):
 
 
 def multi_gaussian_residual_with0( p, x, y):
+    if p[11]>p[10] or p[10]>p[6] or p[6]>p[5] or p[5]>p[4] or p[4]>p[0]: return 1.e8
+    #if p[1]>p[1]: return 1.e8
     return errfunc_hist(multi_gaussian_with0, p, x, y)
 
 
