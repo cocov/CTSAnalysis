@@ -7,8 +7,8 @@ class histogram :
     """
     A simple class to hold histograms data and manipulate them
     """
-
     def __init__(self, data = np.zeros(0),data_shape = (0,), bin_centers = np.zeros(0), bin_center_min=0 , bin_center_max=1 , bin_width=1 ):
+        ## TODO add constructor with binedge or with np.histo directly
         if bin_centers.shape[0] == 0:
             self.bin_width = bin_width
             # generate the bin edge array
@@ -58,9 +58,8 @@ class histogram :
         if self.data[idx][slice[0]:slice[1]:slice[2]].shape == 0:
             return (np.ones((len(p0), 2)) * np.nan).reshape((1,) + (len(p0), 2))
         if not slice: slice = [0, self.bin_centers.shape[0] - 1, 1]
-
         try:
-
+            ## TODO add the chi2 to the fitresult
             out = optimize.least_squares(func, p0, args=(
                 self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[idx][slice[0]:slice[1]:slice[2]]),
                                          bounds=bounds)

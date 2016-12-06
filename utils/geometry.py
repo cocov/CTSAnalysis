@@ -3,7 +3,7 @@ from ctapipe.io.camera import CameraGeometry
 from ctapipe.io.camera import find_neighbor_pixels
 from astropy import units as u
 
-def generate_geometry(cts,availableBoard):
+def generate_geometry(cts,availableBoard=None):
     '''
     Generate the SST-1M geometry from the CTS configuration
     :param cts: a CTS instance
@@ -15,7 +15,7 @@ def generate_geometry(cts,availableBoard):
     pix_id = []
     pix_goodid = []
     for pix in cts.camera.Pixels:
-        if  pix.fadc in availableBoard[pix.sector]:
+        if  not availableBoard or pix.fadc in availableBoard[pix.sector]:
             pix_x.append(pix.center[0])
             pix_y.append(pix.center[1])
             pix_id.append(pix.ID)

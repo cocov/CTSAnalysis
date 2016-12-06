@@ -11,32 +11,71 @@ import sys
 from ctapipe import visualization
 from utils.histogram import histogram
 
-recompute,calib_unknown,apply_calib,perform_spe_fit,get_calib_from_spe = sys.argv[1]=='True',sys.argv[2]=='True',sys.argv[3]=='True',sys.argv[4]=='True',sys.argv[5]=='True'
-if calib_unknown: apply_calib = False
+from optparse import OptionParser
 
+parser = OptionParser()
+# Job configuration
+parser.add_option("-q", "--quiet",
+                  action="store_false", dest="verbose", default=True,
+                  help="don't print status messages to stdout")
+
+# Setup configuration
+parser.add_option("-s", "--cts_sector", dest="cts_sector",
+                  help="Sector covered by CTS", default="1")
+parser.add_option("-l", "--scan_level", dest="scan_level",
+                  help="list of scans DC level, separated by ',', if only three argument, min,max,step", default="50,100,10")
+
+
+
+# File management
+parser.add_option("-f", "--file_list", dest="file_list",
+                  help="list of string differing in the file name, sperated by ','", default='87,88' )
+parser.add_option("-d", "--directory", dest="directory",
+                  help="input directory", default="/data/datasets/CTA/LevelScan/20161130/")
+parser.add_option( "--file_basename", dest="file_basename",
+                  help="file base name ", default="CameraDigicam@localhost.localdomain_0_000.%s.fits.fz")
+parser.add_option( "--calibration_filename", dest="calibration_filename",
+                  help="calibration file name", default="calib_spe.npz")
+parser.add_option( "--calibration_directory", dest="calibration_directory",
+                  help="calibration file directory", default="/data/datasets/CTA/DarkRun/")
+
+# Arange the options
+(options, args) = parser.parse_args()
+options.file_list = options.file_list.split(',')
+options.scan_level = [int(level) for level in options.scan_level.split(',')]
+
+if len(options.scan_level)==3: options.scan_level=np.arange(options.scan_level[0],options.scan_level[1],options.scan_level[2])
 
 # Define Geometry
-cts = cts.CTS('/data/software/CTS/config/cts_config_0.cfg',
+sector_to_angle = {1:0.,2:120.,3:240.} #TODO check
+cts = cts.CTS('/data/software/CTS/config/cts_config_%d.cfg'%(sector_to_angle[options.cts_sector]),
               '/data/software/CTS/config/camera_config.cfg',
-              angle=0., connected=False)
-geom,good_pixels = generate_geometry(cts,availableBoard={1:[0,1,2,3,4,5,6,7,8,9],2:[],3:[]})
-good_pixels_mask = np.repeat(good_pixels, 50).reshape(good_pixels.shape[0], 1, 50)
+              angle=sector_to_angle[options.cts_sector], connected=False)
+
+geom,good_pixels = generate_geometry(cts)
 
 plt.ion()
 
-# Some object definition
-calib = {}
-if not calib_unknown:
-    if get_calib_from_spe:
-        print('--|> Recover baseline and sigma_e from /data/datasets/DarkRun/calib_spe.npz')
-        calib = np.load("/data/datasets/DarkRun/calib_spe.npz")
-    else:
-        print('--|> Recover baseline and sigma_e from /data/datasets/DarkRun/calib.npz')
-        calib = np.load("/data/datasets/DarkRun/calib.npz")
+# Get calibration objects
 
+calib_file = np.load(options.calibration_directory+options.calibration_filename)
 
+def remap_conf_dict(config):
+    new_conf = []
+    for i, pix in enumerate(config[list(config.keys())[0]]):
+        new_conf.append({})
+    for key in list(config.keys()):
+        for i, pix in enumerate(config[key]):
+            if np.isfinite(pix[0]):
+                new_conf[i][key] = pix[0]
+            else:
+                new_conf[i][key] = 0.
+    return new_conf
 
-adcs = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(1296))
+calib = remap_conf_dict(calib_file)
+
+# Prepare the mpe histograms
+ = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(1296,))
 spes = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(1296))
 
 if 'baseline' in calib and apply_calib:
