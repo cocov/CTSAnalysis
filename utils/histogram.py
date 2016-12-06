@@ -97,9 +97,18 @@ class histogram :
             else:
                 fit_results = np.append(fit_results,fit_res,axis=0)
         return fit_results
-
+    '''
     def find_bin(self,x):
+        #(x-self.bin_edge[0])/self.bin_width
         return (np.abs(self.bin_centers-x)).argmin()
+    '''
+    def find_bin(self,x):
+        #TODO test that it gives good value
+        return (x-self.bin_edge[0])//self.bin_width
+
+    def fill(self,value):
+        self.data.apply_along_axis(lambda x : x[value-self.bin_edge[0])//self.bin_width]+= 1 , axis = len(self.data.shape)-len(value.shape)-1
+
 
     def _compute_errors(self):
         self.errors = np.sqrt(self.data)

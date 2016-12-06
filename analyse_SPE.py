@@ -66,7 +66,6 @@ if recompute:
         if n_evt > max_evt: break
         if (n_evt-n_batch*1000)%10==0:print("Progress {:2.1%}".format(float(n_evt - batch_num*n_batch) / n_batch), end="\r")
         for telid in event.r1.tels_with_data:
-            print(event.r1.tel[telid].eventNumber, event.r1.event_id)
             if n_evt%n_batch == 0:
                 print('--|> Treating the batch #%d of %d events'%( batch_num,n_batch))
                 # Update adc histo

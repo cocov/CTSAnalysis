@@ -10,6 +10,7 @@ from utils.fitting import multi_gaussian_residual_with0
 import sys
 from ctapipe import visualization
 from utils.histogram import histogram
+from ctapipe.calib.camera import integrators
 
 from optparse import OptionParser
 
@@ -20,10 +21,13 @@ parser.add_option("-q", "--quiet",
                   help="don't print status messages to stdout")
 
 # Setup configuration
-parser.add_option("-s", "--cts_sector", dest="cts_sector",
+parser.add_option("--cts_sector", dest="cts_sector",
                   help="Sector covered by CTS", default="1")
 parser.add_option("-l", "--scan_level", dest="scan_level",
                   help="list of scans DC level, separated by ',', if only three argument, min,max,step", default="50,100,10")
+
+parser.add_option("-s", "--use_saved_histo", dest="use_saved_histo",
+                  help="load the histograms from file", default=False)
 
 
 
@@ -38,16 +42,21 @@ parser.add_option( "--calibration_filename", dest="calibration_filename",
                   help="calibration file name", default="calib_spe.npz")
 parser.add_option( "--calibration_directory", dest="calibration_directory",
                   help="calibration file directory", default="/data/datasets/CTA/DarkRun/")
+parser.add_option( "saved_histo_directory", dest="saved_histo_directory",
+                  help="directory of histo file", default='/data/datasets/CTA/LevelScan/20161130/')
+parser.add_option( "saved_histo_filename", dest="saved_histo_filename",
+                  help="directory of histo file", default='mpes.npz')
 
 # Arange the options
 (options, args) = parser.parse_args()
 options.file_list = options.file_list.split(',')
 options.scan_level = [int(level) for level in options.scan_level.split(',')]
 
-if len(options.scan_level)==3: options.scan_level=np.arange(options.scan_level[0],options.scan_level[1],options.scan_level[2])
+if len(options.scan_level)==3:
+    options.scan_level=np.arange(options.scan_level[0],options.scan_level[1],options.scan_level[2])
 
 # Define Geometry
-sector_to_angle = {1:0.,2:120.,3:240.} #TODO check
+sector_to_angle = {1:0.,2:120.,3:240.} #TODO check and put it in cts
 cts = cts.CTS('/data/software/CTS/config/cts_config_%d.cfg'%(sector_to_angle[options.cts_sector]),
               '/data/software/CTS/config/camera_config.cfg',
               angle=sector_to_angle[options.cts_sector], connected=False)
@@ -75,40 +84,61 @@ def remap_conf_dict(config):
 calib = remap_conf_dict(calib_file)
 
 # Prepare the mpe histograms
- = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(1296,))
-spes = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(1296))
+mpes = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(options.scan_level.shape+(1296,)))
+peakes = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(options.scan_level.shape+(1296,)))
 
-if 'baseline' in calib and apply_calib:
-    adcs = histogram(bin_center_min=-20., bin_center_max=50., bin_width=1., data_shape=(1296))
-    spes = histogram(bin_center_min=-20., bin_center_max=50., bin_width=1., data_shape=(1296))
+n_batch, batch_num, max_evt = 10, 0, 100
+batch_peakpos = np.ones(options.scan_level.shape+(1296,1))*np.nan
+batch_integration = np.empty(options.scan_level.shape+(1296,1))*np.nan
 
+if not options.use_saved_histo:
+    # Loop over the files
+    for file in options.file_list:
+        # Get the file
+        _url = options.directory+options.file_basename%(file)
+        inputfile_reader = zfits.zfits_event_source( url= _url
+                                                     ,data_type='r1'
+                                                     , max_events=100000)
+        print('--|> Will process %d events from %s'%(max_evt,_url))
 
-if recompute:
-    # Open the file
-    the_url="/data/datasets/CTA/CameraDigicam@localhost.localdomain_0_000.66.fits.fz"
-    inputfile_reader = zfits.zfits_event_source(
-        url=the_url
-        , data_type='r1', max_events=100000)
+        # Loop over event in this file
+        for event in inputfile_reader:
+            if event.event_id > max_evt: break
+            for telid in event.r1.tels_with_data:
+                data = event.r1.tel[telid].adc_samples.values()
+                data = data -  calib_file['baseline'][:,0].reshape(data.shape[0],1)
+                # now integrate
+                integration, window, peakpos = integrators.full_integration(data)
+
+                if np.all(np.isnan(batch_peakpos[0][:,0]):
+                    batch_peakpos[:,1] = peakpos[0]
+                else:
+                    batch = np.append(batch,data.reshape(data.shape[0],1,data.shape[1]),axis = 1)
+
+                if type(batch_spe).__name__!='ndarray':
+                    batch = data.reshape(data.shape[0],1,data.shape[1])
+                else:
+                    batch = np.append(batch,data.reshape(data.shape[0],1,data.shape[1]),axis = 1)
+
 
     # Creating the histograms
 
     # Reading the file
     n_evt,n_batch,batch_num,max_evt=0,1000,0,30000
 
-    print('--|> Will process %d events from %s'%(max_evt,the_url))
     batch = None
 
     print('--|> Reading  the batch #%d of %d events' % (batch_num, n_batch))
 
     for event in inputfile_reader:
-        n_evt += 1
-        if n_evt > max_evt: break
+        if event.r1.event_id > max_evt: break
         if (n_evt-n_batch*1000)%10==0:print("Progress {:2.1%}".format(float(n_evt - batch_num*n_batch) / n_batch), end="\r")
         for telid in event.r1.tels_with_data:
             print(event.r1.tel[telid].eventNumber, event.r1.event_id)
             if n_evt%n_batch == 0:
                 print('--|> Treating the batch #%d of %d events'%( batch_num,n_batch))
                 # Update adc histo
+
                 adcs.fill_with_batch(batch.reshape(batch.shape[0],batch.shape[1]*batch.shape[2]))
                 # Update the spe histo
                 if calib_unknown:
