@@ -41,7 +41,10 @@ class pickable_visu(visualization.CameraDisplay):
 
                 self.extra_plot.set_xlabel('ADC')
                 self.extra_plot.set_ylabel("N / ADC")
-
+                self.extra_plot.xaxis.get_label().set_ha('right')
+                self.extra_plot.xaxis.get_label().set_position((1, 0))
+                self.extra_plot.yaxis.get_label().set_ha('right')
+                self.extra_plot.yaxis.get_label().set_position((0, 1))
 
             if i == 1 :
                 label = 'Fit to Peak ADC'

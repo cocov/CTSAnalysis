@@ -145,12 +145,9 @@ if calib_unknown:
 if perform_spe_fit:
     # Define the function getting the initial fit value, the parameters bound and the slice to fit
     def p0_func(x,config):
-        #return [0.8, 0.0005, 5.6, 100000., 10000., 1000., config['baseline'], 100., 10.,0.]
         return [1000000.   ,0.8, 0.1 , 5.6, 100000.,10000.,1000. , config['baseline']      , 0.,0.8      , 100. ,10.]
 
     def bound_func(x,xrange,config):
-        #param_min = [0.3, 0.1, 0., 10., 1., 0., config['baseline'] - 10., 0.,0.,-10.]
-        #param_max = [8., 5., 100., np.inf, np.inf, np.inf, config['baseline'] + 10., np.inf,np.inf,10.]
         param_min = [0.    ,0.01, 0.01, 0. , 10.   , 1.    , 0.    , config['baseline'] - 10.,-10.,0.8*0.1, 0.    ,0.]
         param_max = [np.inf,8. , 5. , 100., np.inf, np.inf, np.inf, config['baseline'] + 10.,10. ,0.8*10., np.inf,np.inf]
         return (param_min, param_max)
@@ -158,24 +155,6 @@ if perform_spe_fit:
     def slice_func(x,config):
         if np.where(x != 0)[0].shape[0]==0: return[0,1,1]
         return [np.where(x != 0)[0][0]+3,np.where(x != 0)[0][-1],1]
-
-
-    def my_func(param, x, *args, **kwargs):
-        if (len(x))==0:return 1e8
-        p_new = [0.,        #p[0] - Norm of the 0 peak
-                 param[0],  #p[1] - sigma_e
-                 param[1],  #p[2] - sigma_i
-                 param[2],  #p[3] - gain
-                 param[3],  #p[4] - Norm of the 1 peak
-                 param[4],  #p[5] - Norm of the 2 peak
-                 param[5],  #p[6] - Norm of the 3 peak
-                 param[6],  #p[7] - Position of the 0 peak (baseline)
-                 param[9],  #p[8] - Dist between baseline+gain and peak 1 position
-                 1.,        #p[9] - sigma_0
-                 param[7],  #p[10] - Norm of the 4 peak
-                 param[8]   #p[11] - Norm of the 5 peak
-                 ]
-        return multi_gaussian_residual_with0(p_new, x, *args, **kwargs)
 
     def remap_conf_dict(config):
         new_conf = []
@@ -190,9 +169,7 @@ if perform_spe_fit:
 
     print('--|> Compute Gain, sigma_e, sigma_i from SPE distributions')
     # Fit the baseline and sigma e of all pixels
-    #fit_result = spes.fit( my_func , p0_func, slice_func, bound_func,config=remap_conf_dict(calib))
     fit_result = spes.fit(multi_gaussian_residual_with0, p0_func, slice_func, bound_func,config=remap_conf_dict(calib))
-    ## TODO debug the fit
     calib_spe ={}
     calib_spe['gain'] = fit_result[:, 3]
     calib_spe['sigma_e_spe'] = fit_result[:, 1]
@@ -217,17 +194,15 @@ if perform_spe_fit:
     calib = np.load("/data/datasets/DarkRun/calib_spe.npz")
 
 
-
-
 ## Plot the baseline extraction
 def slice_fun(x,**kwargs):
     return [np.where(x != 0)[0][0],np.where(x != 0)[0][-1],1]
 
 fig1, axs1 = plt.subplots(1, 2,figsize=(30, 10))
 plt.subplot(1, 2 ,1)
-axs1[0].set_title('Camera')
-vis_baseline = pickable_visu([adcs,spes],axs1[1],fig1,slice_fun,calib,apply_calib,geom, title='Camera Gains', norm='lin', cmap='YlOrBr',allow_pick=True)
+vis_baseline = pickable_visu([adcs,spes],axs1[1],fig1,slice_fun,calib,apply_calib,geom, title='',norm='lin', cmap='viridis',allow_pick=True)
 vis_baseline.add_colorbar()
+vis_baseline.colorbar.set_label('Gain [ADC/p.e.]')
 plt.subplot(1, 2 ,1)
 h = np.copy(calib['gain'][:,0])
 h_err = np.copy(calib['gain'][:,1])
@@ -238,13 +213,18 @@ ba =calib['baseline_spe'][:,1]
 h[ba>100]=2
 h[h<3]=3
 h[h>6]=6
+
+vis_baseline.axes.xaxis.get_label().set_ha('right')
+vis_baseline.axes.xaxis.get_label().set_position((1,0))
+vis_baseline.axes.yaxis.get_label().set_ha('right')
+vis_baseline.axes.yaxis.get_label().set_position((0,1))
 vis_baseline.image = h
 fig1.canvas.mpl_connect('pick_event', vis_baseline._on_pick )
 vis_baseline.on_pixel_clicked(374)
 
-plt.subplots(2, 2,figsize=(20, 18))
+plt.subplots(2, 2,figsize=(15, 18))
 
-ax= plt.subplot(2, 2 ,1,xlabel='Gain [ADC/p.e.]',ylabel='$N_{pixel}$')
+ax= plt.subplot(2, 2 ,1,xlabel='Gain [ADC/p.e.]',ylabel='$\mathrm{N_{pixel}}$')
 hh = np.copy(calib['gain'][:,0])
 hh_fiterr= np.copy(calib['gain'][:,1])
 hh_fin=hh[np.isfinite(hh_fiterr)]
@@ -253,48 +233,64 @@ gain = histogram( data=hist.reshape(1,hist.shape[0]),bin_centers=np.arange(0.,10
 plt.errorbar(x=gain.bin_centers,y=gain.data[0],yerr = gain.errors[0], fmt = 'o')
 gain.predef_fit('Gauss',x_range=[5.,6.],initials=[200.,5.5,0.3])
 ax.plot(gain.fit_axis,gain.fit_function(gain.fit_result[0][:,0],gain.fit_axis))
-ax.text(0.65,0.9,'$\mu$=%1.3f $\pm$ %1.3f\n$\sigma$=%1.3f $\pm$ %1.3f' % (
+ax.text(0.6,0.9,'$\mu$=%1.3f $\pm$ %1.3f\n$\sigma$=%1.3f $\pm$ %1.3f' % (
         gain.fit_result[0][1][0], gain.fit_result[0][1][1],
         gain.fit_result[0][2][0], gain.fit_result[0][2][1]),
-        fontsize=20, transform=ax.transAxes, va='top', )
-
+        fontsize=15, transform=ax.transAxes, va='top', )
+ax.xaxis.get_label().set_ha('right')
+ax.xaxis.get_label().set_position((1,0))
+ax.yaxis.get_label().set_ha('right')
+ax.yaxis.get_label().set_position((0,1))
 
 axs2=plt.subplot(2, 2 ,2)
 axs2.set_xlabel('$\sigma_{e}$')
-axs2.set_ylabel('$N_{pixel}$')
+axs2.set_ylabel('$\mathrm{N_{pixel}}$')
 hh = np.copy(calib['sigma_e_spe'][:,0])
 hh_fiterr= np.copy(calib['sigma_e_spe'][:,1])
 hh_fin=hh[np.isfinite(hh_fiterr)]
 hist ,bin = np.histogram(hh_fin,bins=np.arange(-0.05,2.15,0.1))
 sigma_e = histogram( data=hist.reshape(1,hist.shape[0]),bin_centers=np.arange(0.,2.1,0.1))
 plt.errorbar(x=sigma_e.bin_centers,y=sigma_e.data[0],yerr = sigma_e.errors[0], fmt = 'o')
+axs2.xaxis.get_label().set_ha('right')
+axs2.xaxis.get_label().set_position((1,0))
+axs2.yaxis.get_label().set_ha('right')
+axs2.yaxis.get_label().set_position((0,1))
 
 axs3=plt.subplot(2, 2 ,3)
 axs3.set_xlabel('$\sigma_{i}$')
-axs3.set_ylabel('$N_{pixel}$')
+axs3.set_ylabel('$\mathrm{N_{pixel}}$')
 hh = np.copy(calib['sigma_i'][:,0])
 hh_fiterr= np.copy(calib['sigma_i'][:,1])
 hh_fin=hh[np.isfinite(hh_fiterr)]
 hist ,bin = np.histogram(hh_fin,bins=np.arange(-0.05,2.15,0.1))
 sigma_i = histogram( data=hist.reshape(1,hist.shape[0]),bin_centers=np.arange(0.,2.1,0.1))
 plt.errorbar(x=sigma_i.bin_centers,y=sigma_i.data[0],yerr = sigma_i.errors[0], fmt = 'o')
+axs3.xaxis.get_label().set_ha('right')
+axs3.xaxis.get_label().set_position((1,0))
+axs3.yaxis.get_label().set_ha('right')
+axs3.yaxis.get_label().set_position((0,1))
 
 
 axs4=plt.subplot(2, 2 ,4)
 axs4.set_xlabel('Baseline')
-axs4.set_ylabel('$N_{pixel}$')
+axs4.set_ylabel('$\mathrm{N_{pixel}}$')
 hh = np.copy(calib['baseline'][:,0])
 hh_fiterr= np.copy(calib['baseline'][:,1])
 hh_fin=hh[np.isfinite(hh_fiterr)]
 hist ,bin = np.histogram(hh_fin,bins=np.arange(-0.5,4096.5,1.))
 baseline = histogram( data=hist.reshape(1,hist.shape[0]),bin_centers=np.arange(0.,4096,1.))
 plt.errorbar(x=baseline.bin_centers,y=baseline.data[0],yerr = baseline.errors[0], fmt = 'o')
+axs4.xaxis.get_label().set_ha('right')
+axs4.xaxis.get_label().set_position((1,0))
+axs4.yaxis.get_label().set_ha('right')
+axs4.yaxis.get_label().set_position((0,1))
 
 
 plt.subplots(1, 1,figsize=(15, 10))
 plt.subplot(1, 1 ,1)
-vis_si = visualization.CameraDisplay(geom, title='Camera $\sigma_i$', norm='lin', cmap='YlOrBr')
+vis_si = visualization.CameraDisplay(geom, title='',norm='lin', cmap='viridis')
 vis_si.add_colorbar()
+vis_si.colorbar.set_label('$\sigma_e+\sigma_i$')
 h3 = np.copy(calib['sigma_i'][:,0])
 h4 = np.copy(calib['sigma_e'][:,0])
 h3 = np.add(h3,h4)
@@ -303,6 +299,12 @@ h3[np.isnan(h_err)]=1.2
 h3[h3>2.3]=1.2
 ba =calib['baseline_spe'][:,1]
 h3[ba>100]=1.2
+
+vis_si.axes.xaxis.get_label().set_ha('right')
+vis_si.axes.xaxis.get_label().set_position((1,0))
+vis_si.axes.yaxis.get_label().set_ha('right')
+vis_si.axes.yaxis.get_label().set_position((0,1))
+
 vis_si.image = h3
 
 plt.show()
