@@ -41,11 +41,6 @@ for pix in cts.camera.Pixels:
         pix_badid.append(False)
 
 pix_badid= np.array(pix_badid)
-# pixels = list(self.cts.pixel_to_led['DC'].keys())
-# pixels.sort()
-#pix_x = np.array([pix.center[0] for pix in pixels])
-#pix_y = np.array([pix.center[1] for pix in pixels])
-#pix_id = np.array([pix.ID for pix in pixels])
 neighbors_pix = find_neighbor_pixels(pix_x, pix_y, 30.)
 geom = CameraGeometry(0, pix_id, pix_x * u.mm, pix_y * u.mm, np.ones((1296)) * 400., neighbors_pix, 'hexagonal')
 
