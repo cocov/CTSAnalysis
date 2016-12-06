@@ -143,3 +143,8 @@ class histogram :
 
     def _residual(self,function, p , x , y , y_err):
         return (y - function(p, x)) / y_err
+
+    def show(self, which_hist=0 ,show_fit=False):
+
+        plt.figure()
+        plt.step(self.bin_centers, self.data, where='mid', label='mid')
