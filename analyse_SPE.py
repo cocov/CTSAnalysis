@@ -7,6 +7,7 @@ from utils.geometry import generate_geometry
 from utils.fitting import gaussian_residual,spe_peaks_in_event_list
 from utils.plots import pickable_visu
 from utils.fitting import multi_gaussian_residual_with0
+from utils.fitting import multi_gaussian_with0
 import sys
 from ctapipe import visualization
 from utils.histogram import histogram
@@ -144,7 +145,7 @@ if calib_unknown:
 
 if perform_spe_fit:
     # Define the function getting the initial fit value, the parameters bound and the slice to fit
-    def p0_func(x,config):
+    def p0_func(x, xrange, config ):
         return [1000000.   ,0.8, 0.1 , 5.6, 100000.,10000.,1000. , config['baseline']      , 0.,0.8      , 100. ,10.]
 
     def bound_func(x,xrange,config):
@@ -152,7 +153,7 @@ if perform_spe_fit:
         param_max = [np.inf,8. , 5. , 100., np.inf, np.inf, np.inf, config['baseline'] + 10.,10. ,0.8*10., np.inf,np.inf]
         return (param_min, param_max)
 
-    def slice_func(x,config):
+    def slice_func(x,xrange ,config):
         if np.where(x != 0)[0].shape[0]==0: return[0,1,1]
         return [np.where(x != 0)[0][0]+3,np.where(x != 0)[0][-1],1]
 
@@ -169,7 +170,7 @@ if perform_spe_fit:
 
     print('--|> Compute Gain, sigma_e, sigma_i from SPE distributions')
     # Fit the baseline and sigma e of all pixels
-    fit_result = spes.fit(multi_gaussian_residual_with0, p0_func, slice_func, bound_func,config=remap_conf_dict(calib))
+    fit_result = spes.fit(multi_gaussian_with0, p0_func, slice_func, bound_func,config=remap_conf_dict(calib))
     calib_spe ={}
     calib_spe['gain'] = fit_result[:, 3]
     calib_spe['sigma_e_spe'] = fit_result[:, 1]

@@ -25,8 +25,8 @@ class histogram :
 
         # generate empty data
         if data.shape[0] == 0:
-            self.data = np.zeros((data_shape,self.bin_centers.shape[0]))
-            self.errors = np.zeros((data_shape,self.bin_centers.shape[0]))
+            self.data = np.zeros(data_shape+(self.bin_centers.shape[0],))
+            self.errors = np.zeros(data_shape+(self.bin_centers.shape[0],))
         else :
             self.data = data
             self._compute_errors()
@@ -35,24 +35,29 @@ class histogram :
         self.fit_function = None
         self.fit_axis = None
 
-    def fill_with_batch(self,batch):
+    def fill_with_batch(self,batch,indices=None):
         """
         A function to transform a batch of data in histogram and add it to the existing one
         :param batch: a np.array with the n-1 same shape of data, and n dimension containing the arry to histogram
         :return:
         """
+        if not indices:
+            data = self.data
+        else:
+            data = self.data[indices]
+
         hist = lambda x : np.histogram( x , bins = self.bin_edges , density = False)[0]
         if batch.dtype != 'object':
             # Get the new histogram
-            new_hist = np.apply_along_axis(hist, len(self.data.shape)-1, batch)
+            new_hist = np.apply_along_axis(hist, len(data.shape)-1, batch)
             # Add it to the existing
-            self.data = np.add(self.data,new_hist)
+            data = np.add(data,new_hist)
         else :
             for indices in np.ndindex(batch.shape):
                 # Get the new histogram
                 new_hist = hist(batch[indices])
                 # Add it to the existing
-                self.data[indices] = np.add(self.data[indices],new_hist)
+                data[indices] = np.add(data[indices],new_hist)
         self._compute_errors()
 
     def _axis_fit( self, idx, func, p0  , slice=None , bounds=None):
@@ -61,9 +66,10 @@ class histogram :
         if not slice: slice = [0, self.bin_centers.shape[0] - 1, 1]
         try:
             ## TODO add the chi2 to the fitresult
-            out = optimize.least_squares(func, p0, args=(
-                self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[idx][slice[0]:slice[1]:slice[2]]),
-                                         bounds=bounds)
+            residual = lambda p, x, y, y_err: self._residual(func, p, x, y , y_err)
+            out = optimize.least_squares(residual, p0, args=(
+                self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[idx][slice[0]:slice[1]:slice[2]],
+                self.errors[idx][slice[0]:slice[1]:slice[2]]), bounds=bounds)
             val = out.x
 
             try:
@@ -90,8 +96,8 @@ class histogram :
         fit_results = None
         # perform the fit of the 1D array in the last dimension
         for indices in np.ndindex(data_shape):
-            fit_res = self._axis_fit( indices , func, p0_func(self.data[indices],config=config[indices[0]]),
-                                      slice=slice_func(self.data[indices[0]],config=config[indices[0]]),
+            fit_res = self._axis_fit( indices , func , p0_func(self.data[indices],self.bin_centers,config=config[indices[0]]),
+                                      slice=slice_func(self.data[indices[0]],self.bin_centers,config=config[indices[0]]),
                                       bounds = bound_func(self.data[indices[0]],self.bin_centers,config=config[indices[0]]))
             if type(fit_results).__name__!='ndarray':
                 fit_results = fit_res
@@ -105,10 +111,28 @@ class histogram :
     '''
     def find_bin(self,x):
         #TODO test that it gives good value
-        return (x-self.bin_edge[0])//self.bin_width
+        return (x-self.bin_edges[0])//self.bin_width
 
-    def fill(self,value):
-        self.data.apply_along_axis(lambda x : x[value-self.bin_edge[0])//self.bin_width]+= 1 , axis = len(self.data.shape)-len(value.shape)-1
+
+    def fill(self,value,indices=None):
+        '''
+        Update the histogram array with an array of values
+        :param value:
+        :param indices:
+        :return: void
+        '''
+        # change the value array to an array of histogram index to be modified
+        hist_indicies = ((value - self.bin_edges[0]) // self.bin_width).astype(int)
+        # treat overflow and underflow
+        hist_indicies[hist_indicies>self.data.shape[-1]-1]=self.data.shape[-1]-1
+        hist_indicies[hist_indicies<0]=0
+        # get the corresponding indices multiplet
+        dim_indices   = tuple( [np.indices(value.shape)[i].reshape(np.prod(value.shape)) for i in range(np.indices(value.shape).shape[0])], )
+        dim_indices  += (hist_indicies,)
+        if value[...,0].shape == self.data[...,0].shape or not indices:
+            self.data[dim_indices]+=1
+        else:
+            self.data[indices][dim_indices]+=1
 
 
     def _compute_errors(self):
@@ -117,28 +141,28 @@ class histogram :
 
 
     def predef_fit(self,type = 'Gauss' ,x_range=None, initials = None,bounds = None, config= None):
-
         if type == 'Gauss':
             p0_func = None
             if not initials:
-                p0_func = lambda x , *args, **kwargs : [np.sum(x), np.mean(x), np.std(x)]
+                p0_func = lambda x , bla , config : [np.sum(x), np.average(x), np.std(x)] #TODO modify
             else :
-                p0_func = lambda x, *args, **kwargs: initials
+                p0_func = lambda x,  bla , config: initials
             slice_func = None
             if not x_range:
                 x_range=[self.bin_edges[0],self.bin_edges[-1]]
-                slice_func = lambda x , *args, **kwargs : [0, self.bin_centers.shape[0], 1]
+                slice_func = lambda x , bla , config : [0, self.bin_centers.shape[0], 1]
             else:
-                slice_func = lambda x , *args, **kwargs : [self.find_bin(x_range[0]), self.find_bin(x_range[1]), 1]
+                slice_func = lambda x , bla , config : [self.find_bin(x_range[0]), self.find_bin(x_range[1]), 1]
             bound_func = None
             if not bounds:
-                bound_func = lambda x , *args, **kwargs : ([0.,-np.inf,1e-9],[np.inf,np.inf,np.inf])
+                bound_func = lambda x , bla , config: ([0.,-np.inf,1e-9],[np.inf,np.inf,np.inf])
             else:
-                bound_func = lambda x , *args, **kwargs : bounds
+                bound_func = lambda x , bla , config : bounds
 
             data_shape = list(self.data.shape)
             data_shape.pop()
             data_shape = tuple(data_shape)
+
 
             config_array = None
             if not config:
@@ -146,7 +170,7 @@ class histogram :
             else :
                 config_array = config
 
-            self.fit_result = self.fit(gaussian_residual, p0_func=p0_func, slice_func=slice_func, bound_func=bound_func, config=config_array)
+            self.fit_result = self.fit(gaussian, p0_func=p0_func, slice_func=slice_func, bound_func=bound_func, config=config_array)
             self.fit_function = gaussian
             self.fit_axis = np.linspace(x_range[0],x_range[1],(x_range[1]-x_range[0])/self.bin_width*10.)
             # TODO self.fit_text
