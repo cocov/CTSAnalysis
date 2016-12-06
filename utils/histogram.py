@@ -2,6 +2,7 @@ import numpy as np
 from numpy.linalg import inv
 from scipy import optimize
 from utils.fitting import gaussian_residual,gaussian
+import matplotlib.pyplot as plt
 
 class histogram :
     """
@@ -125,6 +126,7 @@ class histogram :
                 p0_func = lambda x, *args, **kwargs: initials
             slice_func = None
             if not x_range:
+                x_range=[self.bin_edges[0],self.bin_edges[-1]]
                 slice_func = lambda x , *args, **kwargs : [0, self.bin_centers.shape[0], 1]
             else:
                 slice_func = lambda x , *args, **kwargs : [self.find_bin(x_range[0]), self.find_bin(x_range[1]), 1]
@@ -151,3 +153,33 @@ class histogram :
 
     def _residual(self,function, p , x , y , y_err):
         return (y - function(p, x)) / y_err
+
+    def show(self, which_hist=0 ,show_fit=False):
+
+        print(self.bin_centers.shape)
+        print(self.data.shape)
+
+        x_text = np.min(self.bin_centers[which_hist])
+        y_text = 0.8*(np.max(self.data[which_hist])+ self.errors[which_hist, np.argmax(self.data[which_hist])])
+
+        text_fit_result = ''
+        precision = int(3)
+
+        if show_fit:
+
+            for i in range(self.fit_result[which_hist].shape[0]):
+                text_fit_result += 'p' +str(i) +  ' : ' + str(round(self.fit_result[which_hist,i,0],precision))
+                text_fit_result += ' $\pm$ ' + str(round(self.fit_result[which_hist,i,1],precision))
+                text_fit_result += '\n'
+
+
+        plt.figure()
+        plt.step(self.bin_centers, self.data[which_hist], where='mid', label='hist')
+        plt.errorbar(self.bin_centers, self.data[which_hist], yerr=self.errors[which_hist])
+        if show_fit:
+            plt.plot(self.bin_centers, self.fit_function(self.fit_result[which_hist,:,0], self.bin_centers), label='fit')
+            plt.text(x_text, y_text, text_fit_result, withdash=True)
+        plt.xlabel('bin')
+        plt.ylabel('count')
+        plt.ylim((0, np.max(self.data[which_hist])+ self.errors[which_hist, np.argmax(self.data[which_hist])]))
+        plt.legend(loc='best')
