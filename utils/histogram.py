@@ -116,6 +116,7 @@ class histogram :
                 p0_func = lambda x, *args, **kwargs: initials
             slice_func = None
             if not x_range:
+                x_range=[self.bin_edges[0],self.bin_edges[-1]]
                 slice_func = lambda x , *args, **kwargs : [0, self.bin_centers.shape[0], 1]
             else:
                 slice_func = lambda x , *args, **kwargs : [self.find_bin(x_range[0]), self.find_bin(x_range[1]), 1]
