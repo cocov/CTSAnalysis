@@ -207,10 +207,11 @@ class histogram :
         precision = int(3)
 
         if show_fit:
-            print(self.fit_result.shape)
-            for i in range(self.fit_result[which_hist].shape[0]):
-                text_fit_result += 'p' +str(i) +  ' : ' + str(round(self.fit_result[which_hist,i,0],precision))
-                text_fit_result += ' $\pm$ ' + str(round(self.fit_result[which_hist,i,1],precision))
+            print("Fit result",self.fit_result)
+            ## todo check np.prod
+            for i in range(self.fit_result[np.prod(which_hist)].shape[0]):
+                text_fit_result += 'p' +str(i) +  ' : ' + str(np.round(self.fit_result[which_hist,i,0],precision))
+                text_fit_result += ' $\pm$ ' + str(np.round(self.fit_result[which_hist,i,1],precision))
                 text_fit_result += '\n'
 
         ax=axis
@@ -220,14 +221,14 @@ class histogram :
         #plt.step(self.bin_centers, self.data[which_hist], where='mid', label='hist')
         ax.errorbar(self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[which_hist][slice[0]:slice[1]:slice[2]], yerr=self.errors[which_hist][slice[0]:slice[1]:slice[2]],
                     fmt = 'o',label='MPE, pixel %d | AC DAC Level=%d'%(which_hist[1],which_hist[0]*10+50))
-        if show_fit:
-            ax.plot(self.bin_centers[slice[0]:slice[1]:slice[2]], self.fit_function(self.fit_result[which_hist][:,0], self.bin_centers[slice[0]:slice[1]:slice[2]]), label='fit')
+        if show_fit and not np.isnan(self.fit_result[np.prod(which_hist)][:,0][0]):
+            #todo check np.prod
+            ax.plot(self.bin_centers[slice[0]:slice[1]:slice[2]], self.fit_function(self.fit_result[np.prod(which_hist)][:,0], self.bin_centers[slice[0]:slice[1]:slice[2]]), label='fit')
             ax.text(x_text, y_text, text_fit_result)
         if not axis :
             ax.xlabel(self.xlabel)
             ax.ylabel(self.ylabel)
         else :
-
             ax.set_xlabel(self.xlabel)
             ax.set_ylabel(self.ylabel)
             ax.xaxis.get_label().set_ha('right')

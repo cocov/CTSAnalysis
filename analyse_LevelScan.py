@@ -188,4 +188,3 @@ def show_level(level,hist):
 
 
 show_level(3,mpes)
-show_level(3,peaks)
