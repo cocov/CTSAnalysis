@@ -8,7 +8,7 @@ class histogram :
     """
     A simple class to hold histograms data and manipulate them
     """
-    def __init__(self, data = np.zeros(0),data_shape = (0,), bin_centers = np.zeros(0), bin_center_min=0 , bin_center_max=1 , bin_width=1 ):
+    def __init__(self, data = np.zeros(0),data_shape = (0,), bin_centers = np.zeros(0), bin_center_min=0 , bin_center_max=1 , bin_width=1 , xlabel='x',ylabel='y',label='hist'):
         ## TODO add constructor with binedge or with np.histo directly
         if bin_centers.shape[0] == 0:
             self.bin_width = bin_width
@@ -34,6 +34,9 @@ class histogram :
         self.fit_result = None
         self.fit_function = None
         self.fit_axis = None
+        self.xlabel = xlabel
+        self.ylabel = ylabel
+        self.label = label
 
     def fill_with_batch(self,batch,indices=None):
         """
@@ -128,7 +131,7 @@ class histogram :
         hist_indicies[hist_indicies<0]=0
         # get the corresponding indices multiplet
         dim_indices   = tuple( [np.indices(value.shape)[i].reshape(np.prod(value.shape)) for i in range(np.indices(value.shape).shape[0])], )
-        dim_indices  += (hist_indicies,)
+        dim_indices  += (hist_indicies.reshape(np.prod(value.shape)),)
         if value[...,0].shape == self.data[...,0].shape or not indices:
             self.data[dim_indices]+=1
         else:
@@ -178,32 +181,51 @@ class histogram :
     def _residual(self,function, p , x , y , y_err):
         return (y - function(p, x)) / y_err
 
-    def show(self, which_hist=0 ,show_fit=False):
+    def show(self, which_hist= None , axis=None ,show_fit=False, slice = None):
 
-        print(self.bin_centers.shape)
-        print(self.data.shape)
+        if not which_hist:
+            which_hist=(0,)*len(self.data[...,0].shape)
 
-        x_text = np.min(self.bin_centers[which_hist])
-        y_text = 0.8*(np.max(self.data[which_hist])+ self.errors[which_hist, np.argmax(self.data[which_hist])])
+        if not slice:
+            slice=[0,self.bin_centers.shape[0],1]
+        x_text = np.min(self.bin_centers[slice[0]:slice[1]:slice[2]])
+        y_text = 0.8 *(np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])
 
         text_fit_result = ''
         precision = int(3)
 
         if show_fit:
-
-            for i in range(self.fit_result[which_hist].shape[0]):
+            for i in range(self.fit_result[which_hist][slice[0]:slice[1]:slice[2]].shape[0]):
                 text_fit_result += 'p' +str(i) +  ' : ' + str(round(self.fit_result[which_hist,i,0],precision))
                 text_fit_result += ' $\pm$ ' + str(round(self.fit_result[which_hist,i,1],precision))
                 text_fit_result += '\n'
 
-
-        plt.figure()
-        plt.step(self.bin_centers, self.data[which_hist], where='mid', label='hist')
-        plt.errorbar(self.bin_centers, self.data[which_hist], yerr=self.errors[which_hist])
+        ax=axis
+        if not axis :
+            plt.figure()
+            ax=plt
+        #plt.step(self.bin_centers, self.data[which_hist], where='mid', label='hist')
+        print((which_hist[1],which_hist[0]*10+50))
+        ax.errorbar(self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[which_hist][slice[0]:slice[1]:slice[2]], yerr=self.errors[which_hist][slice[0]:slice[1]:slice[2]],
+                    fmt = 'o',label='MPE, pixel %d | AC DAC Level=%d'%(which_hist[1],which_hist[0]*10+50))
         if show_fit:
-            plt.plot(self.bin_centers, self.fit_function(self.fit_result[which_hist,:,0], self.bin_centers), label='fit')
-            plt.text(x_text, y_text, text_fit_result, withdash=True)
-        plt.xlabel('bin')
-        plt.ylabel('count')
-        plt.ylim((0, np.max(self.data[which_hist])+ self.errors[which_hist, np.argmax(self.data[which_hist])]))
-        plt.legend(loc='best')
+            ax.plot(self.bin_centers[slice[0]:slice[1]:slice[2]], self.fit_function(self.fit_result[which_hist,:,0], self.bin_centers[slice[0]:slice[1]:slice[2]]), label='fit')
+            ax.text(x_text, y_text, text_fit_result, withdash=True)
+        if not axis :
+            ax.xlabel(self.xlabel)
+            ax.ylabel(self.ylabel)
+        else :
+
+            ax.set_xlabel(self.xlabel)
+            ax.set_ylabel(self.ylabel)
+            ax.xaxis.get_label().set_ha('right')
+            ax.xaxis.get_label().set_position((1, 0))
+            ax.yaxis.get_label().set_ha('right')
+            ax.yaxis.get_label().set_position((0, 1))
+        #ax.xaxis.get_label().set_ha('right')
+        #ax.xaxis.get_label().set_position((1,0))
+        #ax.yaxis.get_label().set_ha('right')
+        #ax.yaxis.get_label().set_position((0,1))
+        if not axis :ax.ylim(0, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*1.3)
+        else : ax.set_ylim(0, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*1.3)
+        ax.legend(loc='best')

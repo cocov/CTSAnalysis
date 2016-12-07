@@ -60,7 +60,16 @@ def mpe_gaussian_distribution(x, n_peak, gain, sigma_e, sigma_1, offset, *amplit
 
         return temp
 
-def mpe_distribution(x, n_peak, gain, mu, mu_xt, sigma_e, sigma_1, offset, amplitude=1, type='generalized_poisson'):
+
+def mpe_distribution_general(p, x , type = 'generalized_poisson'):
+    n_peak=p[0]
+    gain = p[1]
+    mu = p[2]
+    mu_xt = p[3]
+    sigma_e = p[4]
+    sigma_1 = p[5]
+    offset = p[6]
+    amplitude = p[7]
     temp = np.zeros(len(x))
     x = x - offset
     for n in range(int(n_peak)):

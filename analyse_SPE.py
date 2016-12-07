@@ -37,12 +37,12 @@ if not calib_unknown:
 
 
 
-adcs = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(1296))
-spes = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(1296))
+adcs = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(1296,))
+spes = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(1296,))
 
 if 'baseline' in calib and apply_calib:
-    adcs = histogram(bin_center_min=-20., bin_center_max=50., bin_width=1., data_shape=(1296))
-    spes = histogram(bin_center_min=-20., bin_center_max=50., bin_width=1., data_shape=(1296))
+    adcs = histogram(bin_center_min=-20., bin_center_max=50., bin_width=1., data_shape=(1296,))
+    spes = histogram(bin_center_min=-20., bin_center_max=50., bin_width=1., data_shape=(1296,))
 
 
 if recompute:
@@ -223,9 +223,9 @@ vis_baseline.image = h
 fig1.canvas.mpl_connect('pick_event', vis_baseline._on_pick )
 vis_baseline.on_pixel_clicked(374)
 
-plt.subplots(2, 2,figsize=(15, 18))
+plt.subplots(1, 1,figsize=(7.5, 9))
 
-ax= plt.subplot(2, 2 ,1,xlabel='Gain [ADC/p.e.]',ylabel='$\mathrm{N_{pixel}}$')
+ax= plt.subplot(1, 1 ,1,xlabel='Gain [ADC/p.e.]',ylabel='$\mathrm{N_{pixel}}$')
 hh = np.copy(calib['gain'][:,0])
 hh_fiterr= np.copy(calib['gain'][:,1])
 hh_fin=hh[np.isfinite(hh_fiterr)]
@@ -242,6 +242,7 @@ ax.xaxis.get_label().set_ha('right')
 ax.xaxis.get_label().set_position((1,0))
 ax.yaxis.get_label().set_ha('right')
 ax.yaxis.get_label().set_position((0,1))
+'''
 
 axs2=plt.subplot(2, 2 ,2)
 axs2.set_xlabel('$\sigma_{e}$')
@@ -307,5 +308,5 @@ vis_si.axes.yaxis.get_label().set_ha('right')
 vis_si.axes.yaxis.get_label().set_position((0,1))
 
 vis_si.image = h3
-
+'''
 plt.show()
