@@ -40,6 +40,7 @@ backend      : qt5agg
 # If you are using the Qt4Agg backend, you can choose here
 # to use the PyQt4 bindings or the newer PySide bindings to
 # the underlying Qt4 toolkit.
+
 backend.qt5 : PyQt5       # PyQt4 | PySide
 
 # Note that this can be overridden by the environment variable
