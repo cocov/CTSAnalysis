@@ -80,8 +80,8 @@ class pickable_visu_mpe(visualization.CameraDisplay):
         self.extra_plot.cla()
         for i,pickable_data in enumerate(self.pickable_datas):
             col = 'k' if i==0 else 'b'
-            slice = self.slice_func(pickable_data.data[3,pix_id])
-            pickable_data.show(which_hist=(3,pix_id,), axis=self.extra_plot, show_fit=False, slice=slice)
+            slice = self.slice_func(pickable_data.data[self.config['level'],pix_id])
+            pickable_data.show(which_hist=(self.config['level'],pix_id,), axis=self.extra_plot, show_fit=True, slice=slice)
         try:
             self.figure.canvas.draw()
         except ValueError:

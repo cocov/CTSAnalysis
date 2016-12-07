@@ -39,27 +39,23 @@ def erlang_compound(x, mu, mu_xt):
     return temp
 
 
-def mpe_gaussian_distribution(x, n_peak, gain, sigma_e, sigma_1, offset, *amplitude, type='generalized_poisson'):
+def mpe_gaussian_distribution( p , x):
+    p[0] = gain
+    p[1] = sigma_e
+    p[2] = sigma_1
+    p[3] = offset
+    amplitude = []
+    for i in range(4,len(p)-4):
+        amplitude.append(p[i])
+    n_peak = len(amplitude)
     temp = np.zeros(len(x))
     x = x - offset
     amplitude = np.array(amplitude)
-    if n_peak==len(amplitude):
-
-        x = x - offset
-        for n in range(int(n_peak)):
-
-            sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2) * gain
-
-            temp += amplitude[n] * gaussian(x, sigma_n, n * gain)
-
-        return temp
-
-    else:
-
-        print('amplitude and number of peaks not similar')
-
-        return temp
-
+    x = x - offset
+    for n in range(int(n_peak)):
+        sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2) * gain
+        temp += amplitude[n] * gaussian(x, sigma_n, n * gain)
+    return temp
 
 def mpe_distribution_general(p, x , type = 'generalized_poisson'):
     n_peak=p[0]

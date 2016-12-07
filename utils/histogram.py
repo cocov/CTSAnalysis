@@ -99,14 +99,26 @@ class histogram :
         fit_results = None
         # perform the fit of the 1D array in the last dimension
         for indices in np.ndindex(data_shape):
-            fit_res = self._axis_fit( indices , func , p0_func(self.data[indices],self.bin_centers,config=config[indices[0]]),
-                                      slice=slice_func(self.data[indices[0]],self.bin_centers,config=config[indices[0]]),
-                                      bounds = bound_func(self.data[indices[0]],self.bin_centers,config=config[indices[0]]))
+            fit_res = None
+            if not config:
+                fit_res = self._axis_fit( indices , func , p0_func(self.data[indices],self.bin_centers,config=None),
+                                      slice=slice_func(self.data[indices[0]],self.bin_centers,config=None),
+                                      bounds = bound_func(self.data[indices[0]],self.bin_centers,config=None))
+
+            else:
+                fit_res = self._axis_fit(indices, func,
+                                         p0_func(self.data[indices], self.bin_centers, config=config[indices[0]]),
+                                         slice=slice_func(self.data[indices[0]], self.bin_centers,
+                                                          config=config[indices[0]]),
+                                         bounds=bound_func(self.data[indices[0]], self.bin_centers,
+                                                           config=config[indices[0]]))
             if type(fit_results).__name__!='ndarray':
                 fit_results = fit_res
             else:
                 fit_results = np.append(fit_results,fit_res,axis=0)
-        return fit_results
+        self.fit_result= fit_results
+        self.fit_function = func
+
     '''
     def find_bin(self,x):
         #(x-self.bin_edge[0])/self.bin_width
@@ -195,7 +207,8 @@ class histogram :
         precision = int(3)
 
         if show_fit:
-            for i in range(self.fit_result[which_hist][slice[0]:slice[1]:slice[2]].shape[0]):
+            print(self.fit_result.shape)
+            for i in range(self.fit_result[which_hist].shape[0]):
                 text_fit_result += 'p' +str(i) +  ' : ' + str(round(self.fit_result[which_hist,i,0],precision))
                 text_fit_result += ' $\pm$ ' + str(round(self.fit_result[which_hist,i,1],precision))
                 text_fit_result += '\n'
@@ -205,12 +218,11 @@ class histogram :
             plt.figure()
             ax=plt
         #plt.step(self.bin_centers, self.data[which_hist], where='mid', label='hist')
-        print((which_hist[1],which_hist[0]*10+50))
         ax.errorbar(self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[which_hist][slice[0]:slice[1]:slice[2]], yerr=self.errors[which_hist][slice[0]:slice[1]:slice[2]],
                     fmt = 'o',label='MPE, pixel %d | AC DAC Level=%d'%(which_hist[1],which_hist[0]*10+50))
         if show_fit:
-            ax.plot(self.bin_centers[slice[0]:slice[1]:slice[2]], self.fit_function(self.fit_result[which_hist,:,0], self.bin_centers[slice[0]:slice[1]:slice[2]]), label='fit')
-            ax.text(x_text, y_text, text_fit_result, withdash=True)
+            ax.plot(self.bin_centers[slice[0]:slice[1]:slice[2]], self.fit_function(self.fit_result[which_hist][:,0], self.bin_centers[slice[0]:slice[1]:slice[2]]), label='fit')
+            ax.text(x_text, y_text, text_fit_result)
         if not axis :
             ax.xlabel(self.xlabel)
             ax.ylabel(self.ylabel)
