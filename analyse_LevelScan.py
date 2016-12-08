@@ -160,10 +160,6 @@ else :
     mpes.fit_function = mpe_gaussian_distribution
 
 # Plot them
-
-
-
-
 def show_level(level,hist):
     def slice_fun(x, **kwargs):
         return [np.where(x != 0)[0][0], np.where(x != 0)[0][-1], 1]
