@@ -89,7 +89,7 @@ class histogram :
             return (np.ones((len(p0),2)) * np.nan).reshape((1,)+(len(p0),2))
 
 
-    def fit(self,func, p0_func, slice_func, bound_func, config = None):
+    def fit(self,func, p0_func, slice_func, bound_func, config = None ):
         """
         An helper to fit histogram
         :param func:
@@ -100,7 +100,10 @@ class histogram :
         data_shape = tuple(data_shape)
         fit_results = None
         # perform the fit of the 1D array in the last dimension
+        count = 0
         for indices in np.ndindex(data_shape):
+            print("Fit Progress {:2.1%}".format(count/np.prod(data_shape)), end="\r")
+            count+=1
             fit_res = None
             if not config:
                 fit_res = self._axis_fit( indices , func , p0_func(self.data[indices],self.bin_centers,config=None),

@@ -6,7 +6,7 @@ plt.ion()
 h = histogram(bin_center_min=-10., bin_center_max=10., bin_width=1., data_shape=((3,10,)))
 h1 = histogram(bin_center_min=-10., bin_center_max=10., bin_width=1., data_shape=((3,10,)))
 
-data = np.arange(-10.,3*10-10.).reshape(3,10)
+data = np.arange(-10.,3*10).reshape(3,10)
 data1 = np.arange(0.,10).reshape(10)
 
 

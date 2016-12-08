@@ -4,11 +4,15 @@ import numpy as np
 from ctapipe.io import zfits
 from cts import cameratestsetup as cts
 from utils.geometry import generate_geometry
-from utils.histogram import histogram
 from ctapipe.calib.camera import integrators
 from utils.plots import pickable_visu_mpe
-from utils.pdf import mpe_gaussian_distribution
+from utils.pdf import mpe_distribution_general
 from optparse import OptionParser
+from utils.histogram import histogram
+import peakutils
+from matplotlib import pyplot as plt
+import numpy as np
+from scipy.optimize import curve_fit
 
 parser = OptionParser()
 # Job configuration
@@ -20,7 +24,7 @@ parser.add_option("-q", "--quiet",
 parser.add_option("--cts_sector", dest="cts_sector",
                   help="Sector covered by CTS", default=1,type=int)
 parser.add_option("-l", "--scan_level", dest="scan_level",
-                  help="list of scans DC level, separated by ',', if only three argument, min,max,step", default="50,250,10")
+                  help="list of scans DC level, separated by ',', if only three argument, min,max,step", default="50,80,10")
 parser.add_option("-e", "--events_per_level", dest="events_per_level",
                   help="number of events per level", default=3500,type=int)
 parser.add_option("-s", "--use_saved_histo", dest="use_saved_histo",action="store_true",
@@ -42,9 +46,9 @@ parser.add_option( "--calibration_directory", dest="calibration_directory",
 parser.add_option( "--saved_histo_directory", dest="saved_histo_directory",
                   help="directory of histo file", default='/data/datasets/CTA/LevelScan/20161130/')
 parser.add_option( "--saved_histo_filename", dest="saved_histo_filename",
-                  help="name of histo file", default='mpes.npz')
+                  help="name of histo file", default='mpes_few.npz')
 parser.add_option( "--saved_fit_filename", dest="saved_fit_filename",
-                  help="name of fit file", default='fits_mpes.npz')
+                  help="name of fit file", default='fits_mpes_few.npz')
 
 # Arange the options
 (options, args) = parser.parse_args()
@@ -79,12 +83,14 @@ level,evt_num,first_evt,first_evt_num = 0,0,True,0
 if not options.use_saved_histo:
     # Loop over the files
     for file in options.file_list:
+        if level> len(options.scan_level)-1: break
         # Get the file
         _url = options.directory+options.file_basename%(file)
         inputfile_reader = zfits.zfits_event_source( url= _url,data_type='r1', max_events=100000)
         if options.verbose: print('--|> Moving to file %s'%(_url))
         # Loop over event in this file
         for event in inputfile_reader:
+            if level> len(options.scan_level)-1: break
             for telid in event.r1.tels_with_data:
                 if first_evt:
                     first_evt_num = event.r1.tel[telid].eventNumber
@@ -92,6 +98,7 @@ if not options.use_saved_histo:
                 evt_num = event.r1.tel[telid].eventNumber-first_evt_num
                 if evt_num % options.events_per_level == 0:
                     level = int(evt_num / options.events_per_level)
+                    if level> len(options.scan_level)-1: break
                     if options.verbose: print('--|> Moving to DAC Level %d' % (options.scan_level[level]))
                 if options.verbose and (event.r1.event_id) % 100 == 0:
                     print("Progress {:2.1%}".format(
@@ -130,26 +137,60 @@ else :
 
 # Fit them
 if options.perform_fit:
-    def p0_first_func(x,xrange,config):
-        p = []
-        p.append(5.3)
-        p.append(0.7)
-        p.append(0.7)
-        p.append(0.)
-        # how many peaks
-        npeaks= 20#int((x[np.where(x != 0)[0][-1]]-x[np.where(x != 0)[0][0]])//p[0])
-        for i in range(npeaks):
-            p.append(100.)
-        return p
+    def p0_func(y, x, config=None, *args, **kwargs):
+        threshold = 0.005
+        min_dist = 4
+        peaks_index = peakutils.indexes(y, threshold, min_dist)
+        if len(peaks_index)== 0:
+            return [np.nan]*7
+        amplitude = np.sum(y)
+        offset, gain = np.polynomial.polynomial.polyfit(np.arange(0, peaks_index.shape[-1], 1), x[peaks_index], deg=1,
+                                                        w=(np.sqrt(y[peaks_index])))
+        sigma_start = np.zeros(peaks_index.shape[-1])
+        for i in range(peaks_index.shape[-1]):
 
-    def bound_func(x,xrange,config):
-        return None
+            start = max(int(peaks_index[i] - gain // 2),0)    ## Modif to be checked
+            end = min(int(peaks_index[i] + gain // 2),len(x)-1) ## Modif to be checked
+            if start == end and end<len(x)-2:
+                end+=1
+            elif start == end:
+                start-=1
 
-    def slice_func(x,xrange,config):
-        return [np.where(x != 0)[0][0],np.where(x != 0)[0][-1],1]
+            #print(start,end,y[start:end])
+            if i == 0:
+                mu = -np.log(np.sum(y[start:end]) / np.sum(y))
+
+            temp = np.average(x[start:end], weights=y[start:end])
+            sigma_start[i] = np.sqrt(np.average((x[start:end] - temp) ** 2, weights=y[start:end]))
+
+        bounds = [[0., 0.], [np.inf, np.inf]]
+        sigma_n = lambda x , y, n: np.sqrt(x ** 2 + n * y ** 2)
+        sigma, sigma_error = curve_fit(sigma_n, np.arange(0, peaks_index.shape[-1], 1), sigma_start, bounds=bounds)
+        sigma = sigma / gain
+
+        mu_xt = np.mean(y) / mu / gain - 1
+
+        #print([mu, mu_xt, gain, offset, sigma[0], sigma[1]], amplitude)
+
+        return [mu, mu_xt, gain, offset, sigma[0], sigma[1], amplitude]
+
+
+    def bound_func(y, x, config=None, *args, **kwargs):
+
+        param_min = [0., 0., 0., 0., 0., 0., 0.]
+        param_max = [np.mean(y), 1, np.inf, np.inf, np.inf, np.inf, np.sum(y) + np.sqrt(np.sum(y))]
+
+        return (param_min, param_max)
+
+
+    def slice_func(y, x, config=None, *args, **kwargs):
+        if np.where(y != 0)[0].shape[0] == 0: return [0, 1, 1]
+        return [np.where(y != 0)[0][0], np.where(y != 0)[0][-1], 1]
 
     # Perform the actual fit
-    mpes.fit(mpe_gaussian_distribution,p0_first_func, slice_func, bound_func)
+
+    mpes.fit(mpe_distribution_general,p0_func, slice_func, bound_func)
+
     # Save the parameters
     if options.verbose: print('--|> Save the fit result in %s' % (options.saved_histo_directory + options.saved_fit_filename))
     np.savez_compressed(options.saved_histo_directory + options.saved_fit_filename, mpes_fit_results=mpes.fit_result)
@@ -157,16 +198,18 @@ else :
     if options.verbose: print('--|> Load the fit result from %s' % (options.saved_histo_directory + options.saved_fit_filename))
     h = np.load(options.saved_histo_directory + options.saved_fit_filename)
     mpes.fit_result = h['mpes_fit_results']
-    mpes.fit_function = mpe_gaussian_distribution
+    mpes.fit_function = mpe_distribution_general
 
 # Plot them
-def show_level(level,hist):
-    def slice_fun(x, **kwargs):
-        return [np.where(x != 0)[0][0], np.where(x != 0)[0][-1], 1]
+def slice_fun(x, **kwargs):
+    return [np.where(x != 0)[0][0], np.where(x != 0)[0][-1], 1]
 
+
+
+def show_level(level,hist):
     fig, ax = plt.subplots(1, 2, figsize=(30, 10))
     plt.subplot(1, 2, 1)
-    vis_baseline = pickable_visu_mpe([hist], ax[1], fig, slice_fun, {'level':level}, geom, title='', norm='lin',
+    vis_baseline = pickable_visu_mpe([hist], ax[1], fig, slice_fun, {'level': level}, geom, title='', norm='lin',
                                      cmap='viridis', allow_pick=True)
     vis_baseline.add_colorbar()
     vis_baseline.colorbar.set_label('Peak position [4ns]')
@@ -181,6 +224,7 @@ def show_level(level,hist):
     fig.canvas.mpl_connect('pick_event', vis_baseline._on_pick)
     vis_baseline.on_pixel_clicked(516)
     plt.show()
+
 
 
 show_level(3,mpes)
