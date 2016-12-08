@@ -40,6 +40,7 @@ def erlang_compound(x, mu, mu_xt):
 
 
 def mpe_gaussian_distribution( p , x):
+    print(p)
     p[0] = gain
     p[1] = sigma_e
     p[2] = sigma_1
