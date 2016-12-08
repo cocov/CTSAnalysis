@@ -67,9 +67,11 @@ class histogram :
         if self.data[idx][slice[0]:slice[1]:slice[2]].shape == 0:
             return (np.ones((len(p0), 2)) * np.nan).reshape((1,) + (len(p0), 2))
         if not slice: slice = [0, self.bin_centers.shape[0] - 1, 1]
+
         try:
+
             ## TODO add the chi2 to the fitresult
-            residual = lambda p, x, y, y_err: self._residual(func, p, x, y , y_err)
+            residual = lambda p, x, y, y_err: self._residual(func, p, x, y, y_err)
             out = optimize.least_squares(residual, p0, args=(
                 self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[idx][slice[0]:slice[1]:slice[2]],
                 self.errors[idx][slice[0]:slice[1]:slice[2]]), bounds=bounds)
@@ -116,7 +118,8 @@ class histogram :
                 fit_results = fit_res
             else:
                 fit_results = np.append(fit_results,fit_res,axis=0)
-        self.fit_result= fit_results
+
+        self.fit_result = fit_results
         self.fit_function = func
 
     '''
@@ -185,9 +188,7 @@ class histogram :
             else :
                 config_array = config
 
-            self.fit_result = self.fit(gaussian, p0_func=p0_func, slice_func=slice_func, bound_func=bound_func, config=config_array)
-            self.fit_function = gaussian
-            self.fit_axis = np.linspace(x_range[0],x_range[1],(x_range[1]-x_range[0])/self.bin_width*10.)
+            self.fit(gaussian, p0_func=p0_func, slice_func=slice_func, bound_func=bound_func, config=config_array)
             # TODO self.fit_text
 
     def _residual(self,function, p , x , y , y_err):
@@ -207,9 +208,8 @@ class histogram :
         precision = int(3)
 
         if show_fit:
-            print("Fit result",self.fit_result)
-            ## todo check np.prod
-            for i in range(self.fit_result[np.prod(which_hist)].shape[0]):
+            #print(self.fit_result.shape)
+            for i in range(self.fit_result[which_hist].shape[0]):
                 text_fit_result += 'p' +str(i) +  ' : ' + str(np.round(self.fit_result[which_hist,i,0],precision))
                 text_fit_result += ' $\pm$ ' + str(np.round(self.fit_result[which_hist,i,1],precision))
                 text_fit_result += '\n'
@@ -220,15 +220,15 @@ class histogram :
             ax=plt
         #plt.step(self.bin_centers, self.data[which_hist], where='mid', label='hist')
         ax.errorbar(self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[which_hist][slice[0]:slice[1]:slice[2]], yerr=self.errors[which_hist][slice[0]:slice[1]:slice[2]],
-                    fmt = 'o',label='MPE, pixel %d | AC DAC Level=%d'%(which_hist[1],which_hist[0]*10+50))
-        if show_fit and not np.isnan(self.fit_result[np.prod(which_hist)][:,0][0]):
-            #todo check np.prod
-            ax.plot(self.bin_centers[slice[0]:slice[1]:slice[2]], self.fit_function(self.fit_result[np.prod(which_hist)][:,0], self.bin_centers[slice[0]:slice[1]:slice[2]]), label='fit')
+                    fmt = 'o',label='MPE, pixel %d'%(which_hist[0]))
+        if show_fit:
+            ax.plot(self.bin_centers[slice[0]:slice[1]:slice[2]], self.fit_function(self.fit_result[which_hist][:,0], self.bin_centers[slice[0]:slice[1]:slice[2]]), label='fit')
             ax.text(x_text, y_text, text_fit_result)
         if not axis :
             ax.xlabel(self.xlabel)
             ax.ylabel(self.ylabel)
         else :
+
             ax.set_xlabel(self.xlabel)
             ax.set_ylabel(self.ylabel)
             ax.xaxis.get_label().set_ha('right')

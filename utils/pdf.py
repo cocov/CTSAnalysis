@@ -58,31 +58,18 @@ def mpe_gaussian_distribution( p , x):
         temp += amplitude[n] * gaussian(x, sigma_n, n * gain)
     return temp
 
-def mpe_distribution_general(p, x , type = 'generalized_poisson'):
-    n_peak=p[0]
-    gain = p[1]
-    mu = p[2]
-    mu_xt = p[3]
-    sigma_e = p[4]
-    sigma_1 = p[5]
-    offset = p[6]
-    amplitude = p[7]
-    temp = np.zeros(len(x))
+def mpe_distribution_general(p, x):
+
+    mu, mu_xt, gain, offset, sigma_e, sigma_1, amplitude = p
+    temp = np.zeros(x.shape[0])
     x = x - offset
-    for n in range(int(n_peak)):
-        # n = n + 1
+    for n in range(x.shape[0]):
+
         sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2) * gain
 
-        if type == 'generalized_poisson':
-            temp += generalized_poisson(n, mu, mu_xt, amplitude) * gaussian(x, sigma_n, n * gain)
+        temp += generalized_poisson(n, mu, mu_xt) * gaussian(x, sigma_n, n * gain)
 
-        if type == 'poisson':
-            temp += poisson(n, mu + mu_xt) * gaussian(x, sigma_n, n * gain)
-
-        if type == 'erlang_compound':
-            temp += erlang_compound(n*gain, mu, mu_xt) * gaussian(x, sigma_n, n * gain)
-
-    return temp
+    return temp * amplitude
 
 
 if __name__ == '__main__':
