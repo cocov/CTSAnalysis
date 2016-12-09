@@ -58,14 +58,16 @@ def mpe_gaussian_distribution( p , x):
         temp += amplitude[n] * gaussian(x, sigma_n, n * gain)
     return temp
 
-def mpe_distribution_general(p, x):
-    xmin,xmax = np.where(x != 0)[0][0], np.where(x != 0)[0][-1]
+def mpe_distribution_general(p, x, config=None):
 
     mu, mu_xt, gain, offset, sigma_e, sigma_1, amplitude = p
 
+    #print(p)
+
     temp = np.zeros(x.shape)
     x = x - offset
-    for n in range(int(x.shape[-1]//gain)):
+    n_peak = 15
+    for n in range(0, n_peak, 1):
 
         sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2) * gain
 
