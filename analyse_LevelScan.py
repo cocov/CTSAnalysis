@@ -73,6 +73,8 @@ calib_file = np.load(options.calibration_directory+options.calibration_filename)
 
 # Prepare the mpe histograms
 mpes = histogram(bin_center_min=-100., bin_center_max=3095., bin_width=1., data_shape=(options.scan_level.shape+(1296,)),
+                 xlabel='Integrated ADC',ylabel='$\mathrm{N_{entries}}$',label='MPE')
+mpes_peaks = histogram(bin_center_min=-100., bin_center_max=3095., bin_width=1., data_shape=(options.scan_level.shape+(1296,)),
                  xlabel='Peak ADC',ylabel='$\mathrm{N_{entries}}$',label='MPE')
 peaks = histogram(bin_center_min=-1., bin_center_max=51., bin_width=1., data_shape=(options.scan_level.shape+(1296,)),
                   xlabel='Peak maximum position [4ns]', ylabel='$\mathrm{N_{entries}}$', label='MPE')
@@ -123,14 +125,15 @@ if not options.use_saved_histo:
 
                 # and fill the histos
                 mpes.fill(integration[0],indices=(level,))
-                mpes_peak.fill(index_max,indices=(level,))
+                mpes_peaks.fill(data[0][index_max],indices=(level,))
                 peaks.fill(np.argmax(data[0],axis=1),indices=(level,))
     # Save the MPE histos in a file
     mpes._compute_errors()
     peaks._compute_errors()
     if options.verbose : print('--|> Save the data in %s' % (options.saved_histo_directory+options.saved_histo_filename))
     np.savez_compressed(options.saved_histo_directory+options.saved_histo_filename, mpes=mpes.data ,mpes_bin_centers = mpes.bin_centers ,
-                        peaks=peaks.data, peaks_bin_centers=peaks.bin_centers
+                        peaks=peaks.data, peaks_bin_centers=peaks.bin_centers,
+                        mpes_peaks=mpes_peaks.data, mpes_peaks_bin_centers=mpes_peaks.bin_centers
                         )
 else :
     if options.verbose: print('--|> Recover data from %s' % (options.saved_histo_directory+options.saved_histo_filename))
