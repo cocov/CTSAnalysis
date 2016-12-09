@@ -46,7 +46,7 @@ parser.add_option( "--calibration_directory", dest="calibration_directory",
 parser.add_option( "--saved_histo_directory", dest="saved_histo_directory",
                   help="directory of histo file", default='/data/datasets/CTA/LevelScan/20161130/')
 parser.add_option( "--saved_histo_filename", dest="saved_histo_filename",
-                  help="name of histo file", default='mpes.npz')
+                  help="name of histo file", default='mpes_few.npz')
 parser.add_option( "--saved_fit_filename", dest="saved_fit_filename",
                   help="name of fit file", default='fits_mpes_few.npz')
 
@@ -114,6 +114,11 @@ if not options.use_saved_histo:
                           "integration_sigamp": [2, 4],"integration_lwt": 0}
                 # now integrate
                 integration, window, peakpos = integrators.simple_integration(data,params)
+                # try with the max instead
+                i_max = np.argmax(data[0], axis=1)
+                #dim_indices = [np.indices(data[0].shape)[i].reshape(np.prod(data[0].shape)) for i in range(np.indices(data[0].shape).shape[0])]
+                #dim_indices += (i_max,)
+
                 # and fill the histos
                 mpes.fill(integration[0],indices=(level,))
                 peaks.fill(np.argmax(data[0],axis=1),indices=(level,))
@@ -137,26 +142,29 @@ else :
 
 # Fit them
 if options.perform_fit:
-    def p0_func(y, x, config=None, *args, **kwargs):
+
+    def p0_func(y, x, *args,config=None, **kwargs):
+
         threshold = 0.005
         min_dist = 4
         peaks_index = peakutils.indexes(y, threshold, min_dist)
-        if len(peaks_index)== 0:
-            return [np.nan]*7
+
+        if len(peaks_index) == 0:
+            return [np.nan] * 7
         amplitude = np.sum(y)
         offset, gain = np.polynomial.polynomial.polyfit(np.arange(0, peaks_index.shape[-1], 1), x[peaks_index], deg=1,
                                                         w=(np.sqrt(y[peaks_index])))
         sigma_start = np.zeros(peaks_index.shape[-1])
         for i in range(peaks_index.shape[-1]):
 
-            start = max(int(peaks_index[i] - gain // 2),0)    ## Modif to be checked
-            end = min(int(peaks_index[i] + gain // 2),len(x)-1) ## Modif to be checked
-            if start == end and end<len(x)-2:
-                end+=1
+            start = max(int(peaks_index[i] - gain // 2), 0)  ## Modif to be checked
+            end = min(int(peaks_index[i] + gain // 2), len(x))  ## Modif to be checked
+            if start == end and end < len(x) - 2:
+                end += 1
             elif start == end:
-                start-=1
+                start -= 1
 
-            #print(start,end,y[start:end])
+            # print(start,end,y[start:end])
             if i == 0:
                 mu = -np.log(np.sum(y[start:end]) / np.sum(y))
 
@@ -164,23 +172,46 @@ if options.perform_fit:
             sigma_start[i] = np.sqrt(np.average((x[start:end] - temp) ** 2, weights=y[start:end]))
 
         bounds = [[0., 0.], [np.inf, np.inf]]
-        sigma_n = lambda x , y, n: np.sqrt(x ** 2 + n * y ** 2)
+        sigma_n = lambda x, y, n: np.sqrt(x ** 2 + n * y ** 2)
         sigma, sigma_error = curve_fit(sigma_n, np.arange(0, peaks_index.shape[-1], 1), sigma_start, bounds=bounds)
         sigma = sigma / gain
 
         mu_xt = np.mean(y) / mu / gain - 1
 
-        #print([mu, mu_xt, gain, offset, sigma[0], sigma[1]], amplitude)
+        if mu_xt<0.:mu_xt = 0.
+
+        # print([mu, mu_xt, gain, offset, sigma[0], sigma[1]], amplitude)
+
+        if config:
+
+            if 'baseline' in config:
+                offset = config['baseline']
+
+            if 'gain' in config:
+                gain = config['gain']
+
+            return [mu, mu_xt, gain, offset, amplitude]
+
+        # print (gain)
+        # print (mu, mu_xt, gain, offset, sigma[0], sigma[1], amplitude)
 
         return [mu, mu_xt, gain, offset, sigma[0], sigma[1], amplitude]
 
 
-    def bound_func(y, x, config=None, *args, **kwargs):
+    def bound_func(y, x, *args,config=None,  **kwargs):
 
-        param_min = [0., 0., 0., 0., 0., 0., 0.]
-        param_max = [np.mean(y), 1, np.inf, np.inf, np.inf, np.inf, np.sum(y) + np.sqrt(np.sum(y))]
+        if config:
 
-        return (param_min, param_max)
+            param_min = [0., 0., 0., 0., 0.]
+            param_max = [np.mean(y), 1, np.inf, np.inf, np.sum(y) + np.sqrt(np.sum(y))]
+
+
+        else:
+
+            param_min = [0., 0., 0., -np.inf, 0., 0., 0.]
+            param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.sum(y) + np.sqrt(np.sum(y))]
+
+        return param_min, param_max
 
 
     def slice_func(y, x, config=None, *args, **kwargs):
@@ -188,9 +219,8 @@ if options.perform_fit:
         return [np.where(y != 0)[0][0], np.where(y != 0)[0][-1], 1]
 
     # Perform the actual fit
+    mpes.fit(mpe_distribution_general,p0_func, slice_func, bound_func,limited_indices=[(0,700,),(1,700,),(2,700,),(3,700,)])
 
-    mpes.fit(mpe_distribution_general,p0_func, slice_func, bound_func)
-    print(mpes.fit_result[3,516])
     # Save the parameters
     if options.verbose: print('--|> Save the fit result in %s' % (options.saved_histo_directory + options.saved_fit_filename))
     np.savez_compressed(options.saved_histo_directory + options.saved_fit_filename, mpes_fit_results=mpes.fit_result)
@@ -199,9 +229,8 @@ else :
     h = np.load(options.saved_histo_directory + options.saved_fit_filename)
     mpes.fit_result = h['mpes_fit_results']
     mpes.fit_function = mpe_distribution_general
-    print(mpes.fit_result[3,516])
 
-print(mpes.fit_result[3, 516])
+
 # Plot them
 def slice_fun(x, **kwargs):
     #return [np.where(x != 0)[0][0], np.where(x != 0)[0][-1], 1]
@@ -211,7 +240,7 @@ def slice_fun(x, **kwargs):
 def show_level(level,hist):
     fig, ax = plt.subplots(1, 2, figsize=(30, 10))
     plt.subplot(1, 2, 1)
-    vis_baseline = pickable_visu_mpe([hist], ax[1], fig, slice_fun, level, geom, title='', norm='lin',
+    vis_baseline = pickable_visu_mpe([hist], ax[1], fig, slice_fun, level,True, geom, title='', norm='lin',
                                      cmap='viridis', allow_pick=True)
     vis_baseline.add_colorbar()
     vis_baseline.colorbar.set_label('Peak position [4ns]')
@@ -224,9 +253,9 @@ def show_level(level,hist):
     vis_baseline.axes.yaxis.get_label().set_position((0, 1))
     vis_baseline.image = peak
     fig.canvas.mpl_connect('pick_event', vis_baseline._on_pick)
-    vis_baseline.on_pixel_clicked(516)
+    vis_baseline.on_pixel_clicked(700)
     plt.show()
 
 
 
-show_level(0,mpes)
+show_level(3,mpes)

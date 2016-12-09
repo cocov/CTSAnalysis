@@ -80,14 +80,16 @@ class histogram :
                 try:
                     cov = np.sqrt(np.diag(inv(np.dot(out.jac.T, out.jac))))
                     fit_result = np.append(val.reshape(val.shape + (1,)), cov.reshape(cov.shape + (1,)), axis=1)
-                except np.linalg.linalg.LinAlgError:
+                except np.linalg.linalg.LinAlgError as inst:
+                    print(inst)
                     fit_result = np.append(val.reshape(val.shape + (1,)), np.ones((len(p0), 1)) * np.nan, axis=1)
                     fit_result = fit_result.reshape((1,) + fit_rest.shape)
-            except:
+            except Exception as inst:
+                print(inst)
                 fit_result = (np.ones((len(p0), 2)) * np.nan).reshape((1,) + (len(p0), 2))
         return fit_result
 
-    def fit(self,func, p0_func, slice_func, bound_func, config = None ):
+    def fit(self,func, p0_func, slice_func, bound_func, config = None , limited_indices = None):
         """
         An helper to fit histogram
         :param func:
@@ -100,7 +102,10 @@ class histogram :
         self.fit_result = None
         # perform the fit of the 1D array in the last dimension
         count = 0
-        for indices in np.ndindex(data_shape):
+        indices_list = np.ndindex(data_shape)
+        if limited_indices:
+            indices_list = limited_indices
+        for indices in indices_list:
             if type(self.fit_result).__name__ != 'ndarray':
                 self.fit_result = np.ones(data_shape+(len(p0_func(self.data[indices],self.bin_centers,config=None)),2))*np.nan
             print("Fit Progress {:2.1%}".format(count/np.prod(data_shape)), end="\r")
