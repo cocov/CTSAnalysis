@@ -44,6 +44,7 @@ class histogram :
         :param batch: a np.array with the n-1 same shape of data, and n dimension containing the arry to histogram
         :return:
         """
+        data = None
         if not indices:
             data = self.data
         else:
@@ -55,22 +56,30 @@ class histogram :
             new_hist = np.apply_along_axis(hist, len(data.shape)-1, batch)
             # Add it to the existing
             data = np.add(data,new_hist)
+
         else :
             for indices in np.ndindex(batch.shape):
                 # Get the new histogram
                 new_hist = hist(batch[indices])
                 # Add it to the existing
                 data[indices] = np.add(data[indices],new_hist)
+
+        if not indices:
+            self.data = data
+        else:
+            self.data[indices] = data
         self._compute_errors()
 
     def _axis_fit( self, idx, func, p0  , slice=None , bounds=None):
         fit_result = None
+        print(p0, slice, self.data[idx][slice[0]:slice[1]:slice[2]])
         if self.data[idx][slice[0]:slice[1]:slice[2]].shape == 0:
             fit_result = (np.ones((len(p0), 2)) * np.nan).reshape((1,) + (len(p0), 2))
         else:
             if not slice: slice = [0, self.bin_centers.shape[0] - 1, 1]
             try:
                 ## TODO add the chi2 to the fitresult
+
                 residual = lambda p, x, y, y_err: self._residual(func, p, x, y, y_err)
                 out = optimize.least_squares(residual, p0, args=(
                     self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[idx][slice[0]:slice[1]:slice[2]],
@@ -83,7 +92,7 @@ class histogram :
                 except np.linalg.linalg.LinAlgError as inst:
                     print(inst)
                     fit_result = np.append(val.reshape(val.shape + (1,)), np.ones((len(p0), 1)) * np.nan, axis=1)
-                    fit_result = fit_result.reshape((1,) + fit_rest.shape)
+                    fit_result = fit_result.reshape((1,) + fit_result.shape)
             except Exception as inst:
                 print(inst)
                 fit_result = (np.ones((len(p0), 2)) * np.nan).reshape((1,) + (len(p0), 2))
@@ -111,7 +120,7 @@ class histogram :
             print("Fit Progress {:2.1%}".format(count/np.prod(data_shape)), end="\r")
             count+=1
             fit_res = None
-            if not config:
+            if type(config).__name__!='ndarray':
                 fit_res = self._axis_fit( indices , func , p0_func(self.data[indices],self.bin_centers,config=None),
                                       slice=slice_func(self.data[indices[0]],self.bin_centers,config=None),
                                       bounds = bound_func(self.data[indices[0]],self.bin_centers,config=None))
@@ -124,6 +133,8 @@ class histogram :
                                          bounds=bound_func(self.data[indices[0]], self.bin_centers,
                                                            config=config[indices[0]]))
             self.fit_result[indices]=fit_res
+
+
 
     '''
     def find_bin(self,x):
@@ -156,6 +167,32 @@ class histogram :
             self.data[indices][dim_indices]+=1
 
 
+    def fill_with_batch2(self,batch,indices=None):
+        """
+        A function to transform a batch of data in histogram and add it to the existing one
+        :param batch: a np.array with the n-1 same shape of data, and n dimension containing the arry to histogram
+        :return:
+        """
+        if not indices:
+            data = self.data
+        else:
+            data = self.data[indices]
+
+        hist = lambda x : np.histogram( x , bins = self.bin_edges , density = False)[0]
+        if batch.dtype != 'object':
+            # Get the new histogram
+            new_hist = np.apply_along_axis(hist, len(data.shape)-1, batch)
+            # Add it to the existing
+            data = np.add(data,new_hist)
+        else :
+            for indices in np.ndindex(batch.shape):
+                # Get the new histogram
+                new_hist = hist(batch[indices])
+                # Add it to the existing
+                data[indices] = np.add(data[indices],new_hist)
+        self._compute_errors()
+
+
     def _compute_errors(self):
         self.errors = np.sqrt(self.data)
         self.errors[self.errors==0.]=1.
@@ -165,26 +202,27 @@ class histogram :
         if type == 'Gauss':
             p0_func = None
             if not initials:
-                p0_func = lambda x , bla , config : [np.sum(x), np.average(x), np.std(x)] #TODO modify
+                p0_func = lambda x , xrange , config : [np.sum(x), xrange[np.argmax(x)], np.std(x)] #TODO modify
             else :
-                p0_func = lambda x,  bla , config: initials
+                p0_func = lambda x,  xrange , config: initials
             if not slice_func:
                 if not x_range:
                     x_range = [self.bin_edges[0], self.bin_edges[-1]]
-                    slice_func = lambda x, bla, config: [0, self.bin_centers.shape[0], 1]
+                    slice_func = lambda x,xrange , config: [0, self.bin_centers.shape[0], 1]
                 else:
-                    slice_func = lambda x, bla, config: [self.find_bin(x_range[0]), self.find_bin(x_range[1]), 1]
+                    slice_func = lambda x, xrange, config: [self.find_bin(x_range[0]), self.find_bin(x_range[1]), 1]
             bound_func = None
             if not bounds:
-                bound_func = lambda x , bla , config: ([0.,-np.inf,1e-9],[np.inf,np.inf,np.inf])
+                bound_func = lambda x , xrange , config: ([0.,-np.inf,1e-9],[np.inf,np.inf,np.inf])
             else:
-                bound_func = lambda x , bla , config : bounds
+                bound_func = lambda x , xrange , config : bounds
 
             data_shape = list(self.data.shape)
             data_shape.pop()
             data_shape = tuple(data_shape)
             config_array = None
             if not config:
+                print('assign config array')
                 config_array = np.zeros(data_shape)
             else :
                 config_array = config

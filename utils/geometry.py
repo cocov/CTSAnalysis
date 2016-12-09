@@ -688,10 +688,6 @@ def generate_geometry(cts,availableBoard=None):
 
     pix_goodid= np.array(pix_goodid)
     neighbors_pix = find_neighbor_pixels(pix_x, pix_y, 30.)
-    print(pix_id)
-    print(pix_x)
-    print(pix_y)
-    print(neighbors_pix)
     geom = CameraGeometry(0, pix_id, pix_x * u.mm, pix_y * u.mm, np.ones((1296)) * 400., neighbors_pix, 'hexagonal')
     return geom, pix_goodid
 

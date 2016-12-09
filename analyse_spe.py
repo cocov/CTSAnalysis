@@ -4,6 +4,7 @@ import numpy as np
 from ctapipe.io import zfits
 from cts import cameratestsetup as cts
 from utils.geometry import generate_geometry
+from optparse import OptionParser
 from utils.fitting import gaussian_residual,spe_peaks_in_event_list
 from utils.plots import pickable_visu
 from utils.fitting import multi_gaussian_residual_with0
@@ -48,7 +49,7 @@ parser.add_option( "--calibration_directory", dest="calibration_directory",
                   help="calibration file directory", default="/data/datasets/CTA/DarkRun/20161130/")
 
 parser.add_option( "--saved_histo_directory", dest="saved_histo_directory",
-                  help="directory of histo file", default='/data/datasets/CTA/LevelScan/20161130/')
+                  help="directory of histo file", default='/data/datasets/CTA/DarkRun/20161130/')
 parser.add_option( "--saved_adc_histo_filename", dest="saved_adc_histo_filename",
                   help="name of histo file", default='darkrun_adc_hist.npz')
 parser.add_option( "--saved_spe_histo_filename", dest="saved_spe_histo_filename",
@@ -78,9 +79,14 @@ adcs = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_sha
 spes = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(1296,))
 
 
-peaks_index = peakutils.indexes(y, threshold, min_dist)
+#peaks_index = peakutils.indexes(y, threshold, min_dist)
 
-if not options.use_saved_histo_adc:
+if not options.use_saved_histo_adcs:
+    # Reading the file
+    n_evt,n_batch,batch_num,max_evt=0,300,0,1e8
+    batch = None
+
+    print('--|> Treating the batch #%d of %d events' % (batch_num, n_batch))
     for file in options.file_list:
         # Open the file
         _url = options.directory+options.file_basename%(file)
@@ -91,6 +97,28 @@ if not options.use_saved_histo_adc:
         if options.verbose: print('--|> Moving to file %s'%(_url))
         # Loop over event in this file
         for event in inputfile_reader:
+            n_evt += 1
+            if n_evt > max_evt: break
+            if (n_evt - n_batch * batch_num) % 10 == 0: print(
+                "Progress {:2.1%}".format(float(n_evt - batch_num * n_batch) / n_batch), end="\r")
+            for telid in event.r1.tels_with_data:
+                if n_evt % n_batch == 0:
+                    print('--|> Treating the batch #%d of %d events' % (batch_num, n_batch))
+                    # Update adc histo
+                    adcs.fill_with_batch(batch.reshape(batch.shape[0], batch.shape[1] * batch.shape[2]))
+                    # Reset the batch
+                    batch = None
+                    batch_num += 1
+                    print('--|> Reading  the batch #%d of %d events' % (batch_num, n_batch))
+                # Get the data
+                data = np.array(list(event.r1.tel[telid].adc_samples.values()))
+                # Append the data to the batch
+                if type(batch).__name__ != 'ndarray':
+                    batch = data.reshape(data.shape[0], 1, data.shape[1])
+                else:
+                    batch = np.append(batch, data.reshape(data.shape[0], 1, data.shape[1]), axis=1)
+
+            '''
             for telid in event.r1.tels_with_data:
                 if options.verbose and (event.r1.event_id) % 100 == 0:
                     print("Progress {:2.1%}".format(event.r1.event_id/10000), end="\r")
@@ -98,27 +126,42 @@ if not options.use_saved_histo_adc:
                 data = np.array(list(event.r1.tel[telid].adc_samples.values()))
                 # fill with a batch of n_sample
                 adcs.fill_with_batch(data)
+            '''
 
-    if options.verbose : print('--|> Save the data in %s' % (options.saved_histo_directory+options.saved_histo_filename))
-    np.savez_compressed(options.saved_histo_directory+options.saved_histo_filename,
+    if options.verbose : print('--|> Save the data in %s' % (options.saved_histo_directory+options.saved_adc_histo_filename))
+    np.savez_compressed(options.saved_histo_directory+options.saved_adc_histo_filename,
                         adcs=adcs.data, adcs_bin_centers=adcs.bin_centers)
 else:
     if options.verbose: print(
-        '--|> Recover data from %s' % (options.saved_histo_directory + options.saved_histo_filename))
-    file = np.load(options.saved_histo_directory + options.saved_histo_filename)
-    adcs = histogram(data=file['acs'], bin_centers=file['adcs_bin_centers'])
+        '--|> Recover data from %s' % (options.saved_histo_directory + options.saved_adc_histo_filename))
+    file = np.load(options.saved_histo_directory + options.saved_adc_histo_filename)
+    adcs = histogram(data=np.copy(file['adcs']), bin_centers=np.copy(file['adcs_bin_centers']))
 
 
-if not options.perform_adc_fit:
-
+if options.perform_adc_fit:
     def slice_func(y, x, *args,  config=None, **kwargs):
         if np.where(y != 0)[0].shape[0] == 0: return [0, 1, 1]
         xmin = np.where(y != 0)[0].shape[0]
         xmax = np.argmax(y)+2
-        return [xmin,xmax 1]
+        return [xmin,xmax,1]
 
-    adcs.predef_fit(type='Gauss',slice_func=slice_func)
+    print('perform the fit')
 
+    adcs.predef_fit(type='Gauss',slice_func=slice_func,initials = [10000,2000,0.7])
+    if options.verbose: print(
+        '--|> Save the data in %s' % (options.saved_histo_directory + options.saved_adc_fit_filename))
+    np.savez_compressed(options.saved_histo_directory + options.saved_adc_fit_filename, adcs_fit_results=adcs.fit_result)
+else:
+    if options.verbose: print(
+        '--|> Recover data from %s' % (options.saved_histo_directory + options.saved_adc_fit_filename))
+    file = np.load(options.saved_histo_directory + options.saved_adc_fit_filename)
+    adcs.fit_result = np.copy(file['adcs_fit_results'])
+    adcs = histogram(data=file['acs'], bin_centers=file['adcs_bin_centers'])
+
+
+
+
+'''
     def p0_func(y, x, *args,config=None, **kwargs):
 
         threshold = 0.005
@@ -434,3 +477,5 @@ ax.xaxis.get_label().set_position((1,0))
 ax.yaxis.get_label().set_ha('right')
 ax.yaxis.get_label().set_position((0,1))
 plt.show()
+
+'''
