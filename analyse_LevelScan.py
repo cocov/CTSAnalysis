@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from ctapipe.io import zfits
 from cts import cameratestsetup as cts
-from utils.geometry import generate_geometry
+from utils.geometry import generate_geometry,generate_geometry_0
 from ctapipe.calib.camera import integrators
 from utils.plots import pickable_visu_mpe
 from utils.pdf import mpe_distribution_general
@@ -62,7 +62,8 @@ sector_to_angle = {1:0.,2:120.,3:240.} #TODO check and put it in cts
 cts = cts.CTS('/data/software/CTS/config/cts_config_%d.cfg'%(sector_to_angle[options.cts_sector]),
               '/data/software/CTS/config/camera_config.cfg',
               angle=sector_to_angle[options.cts_sector], connected=False)
-geom,good_pixels = generate_geometry(cts)
+#geom,good_pixels = generate_geometry(cts)
+geom = generate_geometry_0()
 
 # Leave the hand
 plt.ion()
@@ -115,12 +116,14 @@ if not options.use_saved_histo:
                 # now integrate
                 integration, window, peakpos = integrators.simple_integration(data,params)
                 # try with the max instead
-                i_max = np.argmax(data[0], axis=1)
+                index_max = (np.arange(0,data[0].shape[0]),np.argmax(data[0], axis=1),)
                 #dim_indices = [np.indices(data[0].shape)[i].reshape(np.prod(data[0].shape)) for i in range(np.indices(data[0].shape).shape[0])]
                 #dim_indices += (i_max,)
 
+
                 # and fill the histos
                 mpes.fill(integration[0],indices=(level,))
+                mpes_peak.fill(index_max,indices=(level,))
                 peaks.fill(np.argmax(data[0],axis=1),indices=(level,))
     # Save the MPE histos in a file
     mpes._compute_errors()
