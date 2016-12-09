@@ -161,19 +161,19 @@ class histogram :
         self.errors[self.errors==0.]=1.
 
 
-    def predef_fit(self,type = 'Gauss' ,x_range=None, initials = None,bounds = None, config= None):
+    def predef_fit(self,type = 'Gauss' ,x_range=None, initials = None,bounds = None, config= None, slice_func=None):
         if type == 'Gauss':
             p0_func = None
             if not initials:
                 p0_func = lambda x , bla , config : [np.sum(x), np.average(x), np.std(x)] #TODO modify
             else :
                 p0_func = lambda x,  bla , config: initials
-            slice_func = None
-            if not x_range:
-                x_range=[self.bin_edges[0],self.bin_edges[-1]]
-                slice_func = lambda x , bla , config : [0, self.bin_centers.shape[0], 1]
-            else:
-                slice_func = lambda x , bla , config : [self.find_bin(x_range[0]), self.find_bin(x_range[1]), 1]
+            if not slice_func:
+                if not x_range:
+                    x_range = [self.bin_edges[0], self.bin_edges[-1]]
+                    slice_func = lambda x, bla, config: [0, self.bin_centers.shape[0], 1]
+                else:
+                    slice_func = lambda x, bla, config: [self.find_bin(x_range[0]), self.find_bin(x_range[1]), 1]
             bound_func = None
             if not bounds:
                 bound_func = lambda x , bla , config: ([0.,-np.inf,1e-9],[np.inf,np.inf,np.inf])
@@ -183,8 +183,6 @@ class histogram :
             data_shape = list(self.data.shape)
             data_shape.pop()
             data_shape = tuple(data_shape)
-
-
             config_array = None
             if not config:
                 config_array = np.zeros(data_shape)

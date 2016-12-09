@@ -11,7 +11,7 @@ from utils.fitting import multi_gaussian_with0
 import sys
 from ctapipe import visualization
 from utils.histogram import histogram
-
+import peakutils
 
 parser = OptionParser()
 # Job configuration
@@ -22,10 +22,16 @@ parser.add_option("-q", "--quiet",
 # Setup configuration
 parser.add_option("--cts_sector", dest="cts_sector",
                   help="Sector covered by CTS", default=1,type=int)
-parser.add_option("-s", "--use_saved_histo", dest="use_saved_histo",action="store_true",
+parser.add_option("-a", "--use_saved_histo_adcs", dest="use_saved_histo_adcs",action="store_true",
                   help="load the histograms from file", default=False)
-parser.add_option("-p", "--perform_fit", dest="perform_fit",action="store_false",
-                  help="perform fit of mpe", default=True)
+parser.add_option("-s", "--use_saved_histo_spe", dest="use_saved_histo_spe",action="store_true",
+                  help="load the histograms from file", default=False)
+
+parser.add_option("-c", "--perform_adc_fit", dest="perform_adc_fit",action="store_false",
+                  help="perform fit of adcs", default=True)
+
+parser.add_option("-e", "--perform_spe_fit", dest="perform_spe_fit",action="store_false",
+                  help="perform fit of spes", default=True)
 
 # File management
 parser.add_option("-f", "--file_list", dest="file_list",
@@ -43,10 +49,15 @@ parser.add_option( "--calibration_directory", dest="calibration_directory",
 
 parser.add_option( "--saved_histo_directory", dest="saved_histo_directory",
                   help="directory of histo file", default='/data/datasets/CTA/LevelScan/20161130/')
-parser.add_option( "--saved_histo_filename", dest="saved_histo_filename",
-                  help="name of histo file", default='darkrun_hist.npz')
-parser.add_option( "--saved_fit_filename", dest="saved_fit_filename",
-                  help="name of fit file", default='darkrun_hist_fit.npz')
+parser.add_option( "--saved_adc_histo_filename", dest="saved_adc_histo_filename",
+                  help="name of histo file", default='darkrun_adc_hist.npz')
+parser.add_option( "--saved_spe_histo_filename", dest="saved_spe_histo_filename",
+                  help="name of histo file", default='darkrun_adc_hist.npz')
+
+parser.add_option( "--saved_adc_fit_filename", dest="saved_adc_fit_filename",
+                  help="name of adc fit file", default='darkrun_adc_fit.npz')
+parser.add_option( "--saved_spe_fit_filename", dest="saved_spe_fit_filename",
+                  help="name of spe fit file", default='darkrun_spe_fit.npz')
 
 # Arange the options
 (options, args) = parser.parse_args()
@@ -67,22 +78,180 @@ adcs = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_sha
 spes = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(1296,))
 
 
-if not use_saved_histo:
-    # Open the file
-    the_url="/data/datasets/CTA/CameraDigicam@localhost.localdomain_0_000.66.fits.fz"
-    inputfile_reader = zfits.zfits_event_source(
-        url=the_url
-        , data_type='r1', max_events=100000)
+peaks_index = peakutils.indexes(y, threshold, min_dist)
 
-    # Creating the histograms
+if not options.use_saved_histo_adc:
+    for file in options.file_list:
+        # Open the file
+        _url = options.directory+options.file_basename%(file)
+        inputfile_reader = zfits.zfits_event_source(
+            url=_url
+            , data_type='r1', max_events=100000)
 
-    # Reading the file
-    n_evt,n_batch,batch_num,max_evt=0,1000,0,30000
+        if options.verbose: print('--|> Moving to file %s'%(_url))
+        # Loop over event in this file
+        for event in inputfile_reader:
+            for telid in event.r1.tels_with_data:
+                if options.verbose and (event.r1.event_id) % 100 == 0:
+                    print("Progress {:2.1%}".format(event.r1.event_id/10000), end="\r")
+                # get the data
+                data = np.array(list(event.r1.tel[telid].adc_samples.values()))
+                # fill with a batch of n_sample
+                adcs.fill_with_batch(data)
 
-    print('--|> Will process %d events from %s'%(max_evt,the_url))
-    batch = None
+    if options.verbose : print('--|> Save the data in %s' % (options.saved_histo_directory+options.saved_histo_filename))
+    np.savez_compressed(options.saved_histo_directory+options.saved_histo_filename,
+                        adcs=adcs.data, adcs_bin_centers=adcs.bin_centers)
+else:
+    if options.verbose: print(
+        '--|> Recover data from %s' % (options.saved_histo_directory + options.saved_histo_filename))
+    file = np.load(options.saved_histo_directory + options.saved_histo_filename)
+    adcs = histogram(data=file['acs'], bin_centers=file['adcs_bin_centers'])
 
-    print('--|> Reading  the batch #%d of %d events' % (batch_num, n_batch))
+
+if not options.perform_adc_fit:
+
+    def slice_func(y, x, *args,  config=None, **kwargs):
+        if np.where(y != 0)[0].shape[0] == 0: return [0, 1, 1]
+        xmin = np.where(y != 0)[0].shape[0]
+        xmax = np.argmax(y)+2
+        return [xmin,xmax 1]
+
+    adcs.predef_fit(type='Gauss',slice_func=slice_func)
+
+    def p0_func(y, x, *args,config=None, **kwargs):
+
+        threshold = 0.005
+        min_dist = 4
+        peaks_index = peakutils.indexes(y, threshold, min_dist)
+
+        if len(peaks_index) == 0:
+            return [np.nan] * 7
+        amplitude = np.sum(y)
+        offset, gain = np.polynomial.polynomial.polyfit(np.arange(0, peaks_index.shape[-1], 1), x[peaks_index], deg=1,
+                                                        w=(np.sqrt(y[peaks_index])))
+        sigma_start = np.zeros(peaks_index.shape[-1])
+        for i in range(peaks_index.shape[-1]):
+
+            start = max(int(peaks_index[i] - gain // 2), 0)  ## Modif to be checked
+            end = min(int(peaks_index[i] + gain // 2), len(x))  ## Modif to be checked
+            if start == end and end < len(x) - 2:
+                end += 1
+            elif start == end:
+                start -= 1
+
+            # print(start,end,y[start:end])
+            if i == 0:
+                mu = -np.log(np.sum(y[start:end]) / np.sum(y))
+
+            temp = np.average(x[start:end], weights=y[start:end])
+            sigma_start[i] = np.sqrt(np.average((x[start:end] - temp) ** 2, weights=y[start:end]))
+
+        bounds = [[0., 0.], [np.inf, np.inf]]
+        sigma_n = lambda x, y, n: np.sqrt(x ** 2 + n * y ** 2)
+        sigma, sigma_error = curve_fit(sigma_n, np.arange(0, peaks_index.shape[-1], 1), sigma_start, bounds=bounds)
+        sigma = sigma / gain
+
+        mu_xt = np.mean(y) / mu / gain - 1
+
+        if mu_xt<0.:mu_xt = 0.
+
+        # print([mu, mu_xt, gain, offset, sigma[0], sigma[1]], amplitude)
+
+        if config:
+
+            if 'baseline' in config:
+                offset = config['baseline']
+
+            if 'gain' in config:
+                gain = config['gain']
+
+            return [mu, mu_xt, gain, offset, amplitude]
+
+        # print (gain)
+        # print (mu, mu_xt, gain, offset, sigma[0], sigma[1], amplitude)
+
+        return [mu, mu_xt, gain, offset, sigma[0], sigma[1], amplitude]
+
+
+    def bound_func(y, x, *args,config=None,  **kwargs):
+
+        if config:
+
+            param_min = [0., 0., 0., 0., 0.]
+            param_max = [np.mean(y), 1, np.inf, np.inf, np.sum(y) + np.sqrt(np.sum(y))]
+
+
+        else:
+
+            param_min = [0., 0., 0., -np.inf, 0., 0., 0.]
+            param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.sum(y) + np.sqrt(np.sum(y))]
+
+        return param_min, param_max
+
+
+    def slice_func(y, x, config=None, *args, **kwargs):
+        if np.where(y != 0)[0].shape[0] == 0: return [0, 1, 1]
+        return [np.where(y != 0)[0][0], np.where(y != 0)[0][-1], 1]
+
+    # Perform the actual fit
+    mpes.fit(mpe_distribution_general,p0_func, slice_func, bound_func,limited_indices=[(0,700,),(1,700,),(2,700,),(3,700,)])
+
+    # Save the parameters
+    if options.verbose: print('--|> Save the fit result in %s' % (options.saved_histo_directory + options.saved_fit_filename))
+    np.savez_compressed(options.saved_histo_directory + options.saved_fit_filename, mpes_fit_results=mpes.fit_result)
+else :
+    if options.verbose: print('--|> Load the fit result from %s' % (options.saved_histo_directory + options.saved_fit_filename))
+    h = np.load(options.saved_histo_directory + options.saved_fit_filename)
+    mpes.fit_result = h['mpes_fit_results']
+    mpes.fit_function = mpe_distribution_general
+
+
+
+
+
+
+
+
+
+
+if not options.use_saved_histo_spe:
+    for file in options.file_list:
+        # Open the file
+        _url = options.directory + options.file_basename % (file)
+        inputfile_reader = zfits.zfits_event_source(
+            url=_url
+            , data_type='r1', max_events=100000)
+
+        if options.verbose: print('--|> Moving to file %s' % (_url))
+        # Loop over event in this file
+        for event in inputfile_reader:
+            for telid in event.r1.tels_with_data:
+                if options.verbose and (event.r1.event_id) % 100 == 0:
+                    print("Progress {:2.1%}".format(event.r1.event_id / 10000), end="\r")
+                # get the data
+                data = np.array(list(event.r1.tel[telid].adc_samples.values()))
+                # fill with a batch of n_sample
+                adcs.fill_with_batch(data)
+
+    if options.verbose: print(
+        '--|> Save the data in %s' % (options.saved_histo_directory + options.saved_histo_filename))
+    np.savez_compressed(options.saved_histo_directory + options.saved_histo_filename,
+                        adcs=adcs.data, adcs_bin_centers=adcs.bin_centers)
+else:
+    if options.verbose: print(
+        '--|> Recover data from %s' % (options.saved_histo_directory + options.saved_histo_filename))
+    file = np.load(options.saved_histo_directory + options.saved_histo_filename)
+    adcs = histogram(data=file['acs'], bin_centers=file['adcs_bin_centers'])
+
+
+
+
+
+
+
+
+
 
     for event in inputfile_reader:
         n_evt += 1
