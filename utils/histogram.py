@@ -64,30 +64,28 @@ class histogram :
         self._compute_errors()
 
     def _axis_fit( self, idx, func, p0  , slice=None , bounds=None):
+        fit_result = None
         if self.data[idx][slice[0]:slice[1]:slice[2]].shape == 0:
-            return (np.ones((len(p0), 2)) * np.nan).reshape((1,) + (len(p0), 2))
-        if not slice: slice = [0, self.bin_centers.shape[0] - 1, 1]
-
-        try:
-
-            ## TODO add the chi2 to the fitresult
-            residual = lambda p, x, y, y_err: self._residual(func, p, x, y, y_err)
-            out = optimize.least_squares(residual, p0, args=(
-                self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[idx][slice[0]:slice[1]:slice[2]],
-                self.errors[idx][slice[0]:slice[1]:slice[2]]), bounds=bounds)
-            val = out.x
-
+            fit_result = (np.ones((len(p0), 2)) * np.nan).reshape((1,) + (len(p0), 2))
+        else:
+            if not slice: slice = [0, self.bin_centers.shape[0] - 1, 1]
             try:
-                cov = np.sqrt(np.diag(inv(np.dot(out.jac.T, out.jac))))
-            except np.linalg.linalg.LinAlgError:
-                fit_rest = np.append(val.reshape(val.shape + (1,)), np.ones((len(p0), 1)) * np.nan, axis=1)
-                fit_rest = fit_rest.reshape((1,) + fit_rest.shape)
-                return fit_rest
-            fit_res = np.append(val.reshape(val.shape + (1,)), cov.reshape(cov.shape + (1,)), axis=1)
-            return fit_res.reshape((1,) + fit_res.shape)
-        except :
-            return (np.ones((len(p0),2)) * np.nan).reshape((1,)+(len(p0),2))
+                ## TODO add the chi2 to the fitresult
+                residual = lambda p, x, y, y_err: self._residual(func, p, x, y, y_err)
+                out = optimize.least_squares(residual, p0, args=(
+                    self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[idx][slice[0]:slice[1]:slice[2]],
+                    self.errors[idx][slice[0]:slice[1]:slice[2]]), bounds=bounds)
+                val = out.x
 
+                try:
+                    cov = np.sqrt(np.diag(inv(np.dot(out.jac.T, out.jac))))
+                    fit_result = np.append(val.reshape(val.shape + (1,)), cov.reshape(cov.shape + (1,)), axis=1)
+                except np.linalg.linalg.LinAlgError:
+                    fit_result = np.append(val.reshape(val.shape + (1,)), np.ones((len(p0), 1)) * np.nan, axis=1)
+                    fit_result = fit_result.reshape((1,) + fit_rest.shape)
+            except:
+                fit_result = (np.ones((len(p0), 2)) * np.nan).reshape((1,) + (len(p0), 2))
+        return fit_result
 
     def fit(self,func, p0_func, slice_func, bound_func, config = None ):
         """
@@ -98,10 +96,13 @@ class histogram :
         data_shape = list(self.data.shape)
         data_shape.pop()
         data_shape = tuple(data_shape)
-        fit_results = None
+        self.fit_function = func
+        self.fit_result = None
         # perform the fit of the 1D array in the last dimension
         count = 0
         for indices in np.ndindex(data_shape):
+            if type(self.fit_result).__name__ != 'ndarray':
+                self.fit_result = np.ones(data_shape+(len(p0_func(self.data[indices],self.bin_centers,config=None)),2))*np.nan
             print("Fit Progress {:2.1%}".format(count/np.prod(data_shape)), end="\r")
             count+=1
             fit_res = None
@@ -117,13 +118,7 @@ class histogram :
                                                           config=config[indices[0]]),
                                          bounds=bound_func(self.data[indices[0]], self.bin_centers,
                                                            config=config[indices[0]]))
-            if type(fit_results).__name__!='ndarray':
-                fit_results = fit_res
-            else:
-                fit_results = np.append(fit_results,fit_res,axis=0)
-
-        self.fit_result = fit_results
-        self.fit_function = func
+            self.fit_result[indices]=fit_res
 
     '''
     def find_bin(self,x):
@@ -211,10 +206,15 @@ class histogram :
         precision = int(3)
 
         if show_fit:
-            #print(self.fit_result.shape)
-            for i in range(self.fit_result[which_hist].shape[0]):
-                text_fit_result += 'p' +str(i) +  ' : ' + str(np.round(self.fit_result[which_hist,i,0],precision))
-                text_fit_result += ' $\pm$ ' + str(np.round(self.fit_result[which_hist,i,1],precision))
+
+            print(self.fit_result.shape)
+            print(self.fit_result.shape[-2])
+            print(which_hist)
+            print (self.fit_result[which_hist][:,0])
+            for i in range(self.fit_result[which_hist].shape[-2]):
+                print()
+                text_fit_result += 'p' +str(i) +  ' : ' + str(np.round(self.fit_result[which_hist+(i,0,)],precision))
+                text_fit_result += ' $\pm$ ' + str(np.round(self.fit_result[which_hist+(i,1,)],precision))
                 text_fit_result += '\n'
 
         ax=axis
@@ -223,7 +223,7 @@ class histogram :
             ax=plt
         #plt.step(self.bin_centers, self.data[which_hist], where='mid', label='hist')
         ax.errorbar(self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[which_hist][slice[0]:slice[1]:slice[2]], yerr=self.errors[which_hist][slice[0]:slice[1]:slice[2]],
-                    fmt = 'o',label='MPE, pixel %d'%(which_hist[0]))
+                    fmt = 'o',label='MPE, level %d'%(which_hist[0]))
         if show_fit:
             ax.plot(self.bin_centers[slice[0]:slice[1]:slice[2]], self.fit_function(self.fit_result[which_hist][:,0], self.bin_centers[slice[0]:slice[1]:slice[2]]), label='fit')
             ax.text(x_text, y_text, text_fit_result)
@@ -245,3 +245,4 @@ class histogram :
         if not axis :ax.ylim(0, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*1.3)
         else : ax.set_ylim(0, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*1.3)
         ax.legend(loc='best')
+

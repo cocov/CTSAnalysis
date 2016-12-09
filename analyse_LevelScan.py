@@ -46,7 +46,7 @@ parser.add_option( "--calibration_directory", dest="calibration_directory",
 parser.add_option( "--saved_histo_directory", dest="saved_histo_directory",
                   help="directory of histo file", default='/data/datasets/CTA/LevelScan/20161130/')
 parser.add_option( "--saved_histo_filename", dest="saved_histo_filename",
-                  help="name of histo file", default='mpes_few.npz')
+                  help="name of histo file", default='mpes.npz')
 parser.add_option( "--saved_fit_filename", dest="saved_fit_filename",
                   help="name of fit file", default='fits_mpes_few.npz')
 
@@ -190,7 +190,7 @@ if options.perform_fit:
     # Perform the actual fit
 
     mpes.fit(mpe_distribution_general,p0_func, slice_func, bound_func)
-
+    print(mpes.fit_result[3,516])
     # Save the parameters
     if options.verbose: print('--|> Save the fit result in %s' % (options.saved_histo_directory + options.saved_fit_filename))
     np.savez_compressed(options.saved_histo_directory + options.saved_fit_filename, mpes_fit_results=mpes.fit_result)
@@ -199,17 +199,19 @@ else :
     h = np.load(options.saved_histo_directory + options.saved_fit_filename)
     mpes.fit_result = h['mpes_fit_results']
     mpes.fit_function = mpe_distribution_general
+    print(mpes.fit_result[3,516])
 
+print(mpes.fit_result[3, 516])
 # Plot them
 def slice_fun(x, **kwargs):
-    return [np.where(x != 0)[0][0], np.where(x != 0)[0][-1], 1]
-
+    #return [np.where(x != 0)[0][0], np.where(x != 0)[0][-1], 1]
+    return [10,500,1]
 
 
 def show_level(level,hist):
     fig, ax = plt.subplots(1, 2, figsize=(30, 10))
     plt.subplot(1, 2, 1)
-    vis_baseline = pickable_visu_mpe([hist], ax[1], fig, slice_fun, {'level': level}, geom, title='', norm='lin',
+    vis_baseline = pickable_visu_mpe([hist], ax[1], fig, slice_fun, level, geom, title='', norm='lin',
                                      cmap='viridis', allow_pick=True)
     vis_baseline.add_colorbar()
     vis_baseline.colorbar.set_label('Peak position [4ns]')
@@ -227,4 +229,4 @@ def show_level(level,hist):
 
 
 
-show_level(3,mpes)
+show_level(0,mpes)
