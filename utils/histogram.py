@@ -58,21 +58,21 @@ class histogram :
             data = np.add(data,new_hist)
 
         else :
-            for indices in np.ndindex(batch.shape):
+            for index in np.ndindex(batch.shape):
                 # Get the new histogram
-                new_hist = hist(batch[indices])
+                new_hist = hist(batch[index])
                 # Add it to the existing
-                data[indices] = np.add(data[indices],new_hist)
+                data[index] = np.add(data[index],new_hist)
 
         if not indices:
             self.data = data
         else:
             self.data[indices] = data
+
         self._compute_errors()
 
     def _axis_fit( self, idx, func, p0  , slice=None , bounds=None):
         fit_result = None
-        print(p0, slice, self.data[idx][slice[0]:slice[1]:slice[2]])
         if self.data[idx][slice[0]:slice[1]:slice[2]].shape == 0:
             fit_result = (np.ones((len(p0), 2)) * np.nan).reshape((1,) + (len(p0), 2))
         else:
@@ -222,7 +222,6 @@ class histogram :
             data_shape = tuple(data_shape)
             config_array = None
             if not config:
-                print('assign config array')
                 config_array = np.zeros(data_shape)
             else :
                 config_array = config
@@ -233,7 +232,7 @@ class histogram :
     def _residual(self,function, p , x , y , y_err):
         return (y - function(p, x)) / y_err
 
-    def show(self, which_hist= None , axis=None ,show_fit=False, slice = None):
+    def show(self, which_hist= None , axis=None ,show_fit=False, slice = None, scale='lin'):
 
         if not which_hist:
             which_hist=(0,)*len(self.data[...,0].shape)
@@ -248,12 +247,7 @@ class histogram :
 
         if show_fit:
 
-            print(self.fit_result.shape)
-            print(self.fit_result.shape[-2])
-            print(which_hist)
-            print (self.fit_result[which_hist][:,0])
             for i in range(self.fit_result[which_hist].shape[-2]):
-                print()
                 text_fit_result += 'p' +str(i) +  ' : ' + str(np.round(self.fit_result[which_hist+(i,0,)],precision))
                 text_fit_result += ' $\pm$ ' + str(np.round(self.fit_result[which_hist+(i,1,)],precision))
                 text_fit_result += '\n'
@@ -262,28 +256,32 @@ class histogram :
         if not axis :
             plt.figure()
             ax=plt
-        #plt.step(self.bin_centers, self.data[which_hist], where='mid', label='hist')
+
         ax.errorbar(self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[which_hist][slice[0]:slice[1]:slice[2]], yerr=self.errors[which_hist][slice[0]:slice[1]:slice[2]],
                     fmt = 'o',label='MPE, level %d'%(which_hist[0]))
         if show_fit:
-            ax.plot(self.bin_centers[slice[0]:slice[1]:slice[2]], self.fit_function(self.fit_result[which_hist][:,0], self.bin_centers[slice[0]:slice[1]:slice[2]]), label='fit')
+            reduced_axis = self.bin_centers[slice[0]:slice[1]:slice[2]]
+            fit_axis = np.arange(reduced_axis[0],reduced_axis[-1],float(reduced_axis[1]-reduced_axis[0])/10)
+            ax.plot(fit_axis, self.fit_function(self.fit_result[which_hist][:,0], fit_axis), label='fit')
             ax.text(x_text, y_text, text_fit_result)
         if not axis :
             ax.xlabel(self.xlabel)
             ax.ylabel(self.ylabel)
         else :
-
+            ax.set_yscale(scale)
             ax.set_xlabel(self.xlabel)
             ax.set_ylabel(self.ylabel)
             ax.xaxis.get_label().set_ha('right')
             ax.xaxis.get_label().set_position((1, 0))
             ax.yaxis.get_label().set_ha('right')
             ax.yaxis.get_label().set_position((0, 1))
-        #ax.xaxis.get_label().set_ha('right')
-        #ax.xaxis.get_label().set_position((1,0))
-        #ax.yaxis.get_label().set_ha('right')
-        #ax.yaxis.get_label().set_position((0,1))
-        if not axis :ax.ylim(0, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*1.3)
-        else : ax.set_ylim(0, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*1.3)
+
+        if not axis :
+            ax.ylim(0, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*1.3)
+        else :
+            if scale!='log':
+                ax.set_ylim(0, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*1.3)
+            else:
+                ax.set_ylim(1e-1, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*3)
         ax.legend(loc='best')
 

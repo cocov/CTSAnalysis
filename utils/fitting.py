@@ -164,38 +164,29 @@ def cleaning_peaks_correct( data, baseline, threshold=2., l=1):
         newpeaks.append(data[best_position]-baseline)
     return newpeaks
 
-def cleaning_peaks( data,threshold=2., l=1):
-    peaks = peakdetect(data, lookahead=l)[0]
-    newpeaks = []
-    for peak in peaks:
-        if peak[0]<2 or peak[0]>47:continue
-        if peak[1]<threshold:continue
-        best_position = 0
-        if max(data[peak[0]],data[peak[0]-1])==data[peak[0]]:
-            best_position = peak[0]
-        else :best_position = peak[0]-1
-        if max(data[best_position],data[peak[0]+1])==data[peak[0]+1]:
-            best_position = peak[0]+1
-        newpeaks.append(data[best_position])
-    return newpeaks
+def cleaning_peaks( datain ,baseline,sigma):
+    data = datain
+    data=data-baseline
+    data[data<2*sigma]=0
+    peaks = peakdetect(data, lookahead=2)[0]
+    new_peaks = []
+    for pp in peaks:
+        p = pp[0]
+        if p < 3 or p > 47: continue
+        maxval = 0.
+        for i in range(3):
+            val = np.sum(data[p - i:p - i + 3:1])
+            if val > maxval: maxval = val
+        if maxval < 3 * (2.5 * sigma): continue
+        new_peaks +=[data[p - 1 + np.argmax(data[p - 1:p + 1:1])]] #[[p - 1 + np.argmax(data[p - 1:p + 1:1]), data[p - 1 + np.argmax(data[p - 1:p + 1:1])]]]
+    return new_peaks
 
-def spe_peaks( data, l=1):
+def spe_peaks_in_event_list( data, baseline,sigma ):
     peaks = []
     for pix in np.ndindex(data.shape[0]):
-        peaks.append(cleaning_peaks(data[pix], l=l))
-    return np.array(peaks,dtype=object)
-
-def spe_peaks_in_event_list( data, baseline = None , variance = None, l=1):
-    peaks = []
-    for pix in np.ndindex(data.shape[0]):
-        th = 0
-        if type(variance).__name__=='ndarray' and type(baseline).__name__=='ndarray':
-            th = baseline[pix[0]]+2.*variance[pix[0]]
-        elif type(variance).__name__=='ndarray' and type(baseline).__name__!='ndarray':
-            th = 2.*variance[pix[0]]
-        else: th = 0
         print("Progress {:2.1%}".format(pix[0] / data.shape[0]), end="\r")
         peaks.append([])
         for evt in np.ndindex(data.shape[1]):
-            peaks[-1]+=cleaning_peaks(data[pix][evt], threshold=th,l=l)
+            peaks[-1]+=cleaning_peaks(data[pix][evt],baseline[pix], sigma[pix])
     return np.array(peaks,dtype=object)
+
