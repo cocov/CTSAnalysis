@@ -346,9 +346,9 @@ figure.facecolor : white    # figure facecolor; 0.75 is scalar gray
 # figure width or height
 figure.subplot.left    : 0.12  # the left side of the subplots of the figure
 figure.subplot.right   : 0.95    # the right side of the subplots of the figure
-figure.subplot.bottom  : 0.1    # the bottom of the subplots of the figure
+figure.subplot.bottom  : 0.16    # the bottom of the subplots of the figure
 figure.subplot.top     : 0.95    # the top of the subplots of the figure
-figure.subplot.wspace  : 0.3    # the amount of width reserved for blank space between subplots
+figure.subplot.wspace  : 0.4    # the amount of width reserved for blank space between subplots
 figure.subplot.hspace  : 0.4    # the amount of height reserved for white space between subplots
 
 ### IMAGES

@@ -178,7 +178,7 @@ def cleaning_peaks( datain ,baseline,sigma):
             val = np.sum(data[p - i:p - i + 3:1])
             if val > maxval: maxval = val
         if maxval < 3 * (2.5 * sigma): continue
-        new_peaks +=[data[p - 1 + np.argmax(data[p - 1:p + 1:1])]] #[[p - 1 + np.argmax(data[p - 1:p + 1:1]), data[p - 1 + np.argmax(data[p - 1:p + 1:1])]]]
+        new_peaks +=[data[p - 1 + np.argmax(data[p - 1:p + 1:1])]+baseline] #[[p - 1 + np.argmax(data[p - 1:p + 1:1]), data[p - 1 + np.argmax(data[p - 1:p + 1:1])]]]
     return new_peaks
 
 def spe_peaks_in_event_list( data, baseline,sigma ):

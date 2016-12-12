@@ -21,9 +21,20 @@ class pickable_visu(visualization.CameraDisplay):
 
     def on_pixel_clicked(self, pix_id):
         self.extra_plot.cla()
+        colors = ['k','r','b']
         for i,pickable_data in enumerate(self.pickable_datas):
             slice = self.slice_func(pickable_data.data[pix_id])
-            pickable_data.show(which_hist=(pix_id,), axis=self.extra_plot, show_fit=self.show_fit, slice=slice, scale= self.axis_scale)
+            init_func = pickable_data.fit_function
+            if i==1:
+                init_func = pickable_data.fit_function
+                func = lambda p, x : init_func(p,x,self.pickable_datas[0].fit_result[pix_id])
+                pickable_data.fit_function = func
+
+            pickable_data.show(which_hist=(pix_id,), axis=self.extra_plot,
+                               show_fit=self.show_fit[i], slice=slice,
+                               scale= self.axis_scale,color=colors[i], setylim = i==0)
+            if i==1:
+                pickable_data.fit_function = init_func
         try:
             self.figure.canvas.draw()
         except ValueError:

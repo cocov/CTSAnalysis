@@ -73,6 +73,10 @@ class histogram :
 
     def _axis_fit( self, idx, func, p0  , slice=None , bounds=None):
         fit_result = None
+        if idx == (700,):
+            print(p0)
+            print(bounds[0])
+            print(bounds[1])
         if self.data[idx][slice[0]:slice[1]:slice[2]].shape == 0:
             fit_result = (np.ones((len(p0), 2)) * np.nan).reshape((1,) + (len(p0), 2))
         else:
@@ -94,7 +98,7 @@ class histogram :
                     fit_result = np.append(val.reshape(val.shape + (1,)), np.ones((len(p0), 1)) * np.nan, axis=1)
                     fit_result = fit_result.reshape((1,) + fit_result.shape)
             except Exception as inst:
-                print(inst)
+                #print('failed fit',inst)
                 fit_result = (np.ones((len(p0), 2)) * np.nan).reshape((1,) + (len(p0), 2))
         return fit_result
 
@@ -116,7 +120,7 @@ class histogram :
             indices_list = limited_indices
         for indices in indices_list:
             if type(self.fit_result).__name__ != 'ndarray':
-                self.fit_result = np.ones(data_shape+(len(p0_func(self.data[indices],self.bin_centers,config=None)),2))*np.nan
+                self.fit_result = np.ones(data_shape+(len(p0_func(self.data[indices],self.bin_centers,config=config)),2))*np.nan
             print("Fit Progress {:2.1%}".format(count/np.prod(data_shape)), end="\r")
             count+=1
             fit_res = None
@@ -126,12 +130,21 @@ class histogram :
                                       bounds = bound_func(self.data[indices[0]],self.bin_centers,config=None))
 
             else:
-                fit_res = self._axis_fit(indices, func,
+                func_reduced = lambda p,x : func(p,x,config[indices])
+                '''
+                fit_res = self._axis_fit(indices, func_reduced,
                                          p0_func(self.data[indices], self.bin_centers, config=config[indices[0]]),
                                          slice=slice_func(self.data[indices[0]], self.bin_centers,
                                                           config=config[indices[0]]),
                                          bounds=bound_func(self.data[indices[0]], self.bin_centers,
                                                            config=config[indices[0]]))
+                '''
+                fit_res = self._axis_fit(indices, func_reduced,
+                                         p0_func(self.data[indices], self.bin_centers, config=config[indices]),
+                                         slice=slice_func(self.data[indices], self.bin_centers,
+                                                          config=config[indices]),
+                                         bounds=bound_func(self.data[indices], self.bin_centers,
+                                                           config=config[indices]))
             self.fit_result[indices]=fit_res
 
 
@@ -232,7 +245,7 @@ class histogram :
     def _residual(self,function, p , x , y , y_err):
         return (y - function(p, x)) / y_err
 
-    def show(self, which_hist= None , axis=None ,show_fit=False, slice = None, scale='lin'):
+    def show(self, which_hist= None , axis=None ,show_fit=False, slice = None, scale='linear', color = 'k', setylim = True ):
 
         if not which_hist:
             which_hist=(0,)*len(self.data[...,0].shape)
@@ -258,11 +271,11 @@ class histogram :
             ax=plt
 
         ax.errorbar(self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[which_hist][slice[0]:slice[1]:slice[2]], yerr=self.errors[which_hist][slice[0]:slice[1]:slice[2]],
-                    fmt = 'o',label='MPE, level %d'%(which_hist[0]))
+                    fmt = 'o'+color,label=self.label)
         if show_fit:
             reduced_axis = self.bin_centers[slice[0]:slice[1]:slice[2]]
             fit_axis = np.arange(reduced_axis[0],reduced_axis[-1],float(reduced_axis[1]-reduced_axis[0])/10)
-            ax.plot(fit_axis, self.fit_function(self.fit_result[which_hist][:,0], fit_axis), label='fit')
+            ax.plot(fit_axis, self.fit_function(self.fit_result[which_hist][:,0], fit_axis), label='fit',color=color)
             ax.text(x_text, y_text, text_fit_result)
         if not axis :
             ax.xlabel(self.xlabel)
@@ -276,12 +289,16 @@ class histogram :
             ax.yaxis.get_label().set_ha('right')
             ax.yaxis.get_label().set_position((0, 1))
 
-        if not axis :
-            ax.ylim(0, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*1.3)
-        else :
-            if scale!='log':
-                ax.set_ylim(0, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*1.3)
+        if setylim:
+            if not axis:
+                ax.ylim(0, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]]) + self.errors[
+                    which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)]) * 1.3)
             else:
-                ax.set_ylim(1e-1, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*3)
+                if scale != 'log':
+                    ax.set_ylim(0, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]]) + self.errors[
+                        which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)]) * 1.3)
+                else:
+                    ax.set_ylim(1e-1, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]]) + self.errors[
+                        which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*3)
         ax.legend(loc='best')
 

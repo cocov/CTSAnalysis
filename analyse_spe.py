@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import matplotlib.pyplot as plt
 import numpy as np
-from ctapipe.io import zfits
 from cts import cameratestsetup as cts
 from utils.geometry import generate_geometry
 from optparse import OptionParser
@@ -12,6 +11,7 @@ from utils.fitting import multi_gaussian_with0
 import sys
 from ctapipe import visualization
 from utils.histogram import histogram
+from data_treatement import make_adc_hist
 import peakutils
 from scipy import signal
 from utils.peakdetect import peakdetect
@@ -55,17 +55,22 @@ parser.add_option( "--saved_histo_directory", dest="saved_histo_directory",
 parser.add_option( "--saved_adc_histo_filename", dest="saved_adc_histo_filename",
                   help="name of histo file", default='darkrun_adc_hist.npz')
 parser.add_option( "--saved_spe_histo_filename", dest="saved_spe_histo_filename",
-                  help="name of histo file", default='darkrun_adc_hist.npz')
+                  help="name of histo file", default='darkrun_spe_hist.npz')
 
 parser.add_option( "--saved_adc_fit_filename", dest="saved_adc_fit_filename",
                   help="name of adc fit file", default='darkrun_adc_fit.npz')
 parser.add_option( "--saved_spe_fit_filename", dest="saved_spe_fit_filename",
                   help="name of spe fit file", default='darkrun_spe_fit.npz')
 
+parser.add_option( "-n","--n_evt_per_batch", dest="n_evt_per_batch",
+                  help="number of events per batch", default=300, type=int)
+parser.add_option( "--evt_max", dest="evt_max",
+                  help="maximal number of events", default=2e5, type=int)
+
+
 # Arange the options
 (options, args) = parser.parse_args()
 options.file_list = options.file_list.split(',')
-
 
 # Define Geometry
 sector_to_angle = {1:0.,2:120.,3:240.} #TODO check and put it in cts
@@ -73,66 +78,18 @@ cts = cts.CTS('/data/software/CTS/config/cts_config_%d.cfg'%(sector_to_angle[opt
               '/data/software/CTS/config/camera_config.cfg',
               angle=sector_to_angle[options.cts_sector], connected=False)
 geom,good_pixels = generate_geometry(cts)
+
 # Leave the hand
 plt.ion()
 
-
+# Define the histograms
 adcs = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(1296,))
 spes = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(1296,))
 
-
-#peaks_index = peakutils.indexes(y, threshold, min_dist)
-
+# Get the adcs
 if not options.use_saved_histo_adcs:
-    # Reading the file
-    n_evt,n_batch,batch_num,max_evt=0,300,0,1e8
-    batch = None
-
-    print('--|> Treating the batch #%d of %d events' % (batch_num, n_batch))
-    for file in options.file_list:
-        # Open the file
-        _url = options.directory+options.file_basename%(file)
-        inputfile_reader = zfits.zfits_event_source(
-            url=_url
-            , data_type='r1', max_events=100000)
-
-        if options.verbose: print('--|> Moving to file %s'%(_url))
-        # Loop over event in this file
-        for event in inputfile_reader:
-            n_evt += 1
-            if n_evt > max_evt: break
-            if (n_evt - n_batch * batch_num) % 10 == 0: print(
-                "Progress {:2.1%}".format(float(n_evt - batch_num * n_batch) / n_batch), end="\r")
-            for telid in event.r1.tels_with_data:
-                if n_evt % n_batch == 0:
-                    print('--|> Treating the batch #%d of %d events' % (batch_num, n_batch))
-                    # Update adc histo
-                    adcs.fill_with_batch(batch.reshape(batch.shape[0], batch.shape[1] * batch.shape[2]))
-                    # Reset the batch
-                    batch = None
-                    batch_num += 1
-                    print('--|> Reading  the batch #%d of %d events' % (batch_num, n_batch))
-                # Get the data
-                data = np.array(list(event.r1.tel[telid].adc_samples.values()))
-                # Append the data to the batch
-                if type(batch).__name__ != 'ndarray':
-                    batch = data.reshape(data.shape[0], 1, data.shape[1])
-                else:
-                    batch = np.append(batch, data.reshape(data.shape[0], 1, data.shape[1]), axis=1)
-
-            '''
-            for telid in event.r1.tels_with_data:
-                if options.verbose and (event.r1.event_id) % 100 == 0:
-                    print("Progress {:2.1%}".format(event.r1.event_id/10000), end="\r")
-                # get the data
-                data = np.array(list(event.r1.tel[telid].adc_samples.values()))
-                # fill with a batch of n_sample
-                adcs.fill_with_batch(data)
-            '''
-
-    if options.verbose : print('--|> Save the data in %s' % (options.saved_histo_directory+options.saved_adc_histo_filename))
-    np.savez_compressed(options.saved_histo_directory+options.saved_adc_histo_filename,
-                        adcs=adcs.data, adcs_bin_centers=adcs.bin_centers)
+    # Fill the adcs hist from data
+    make_adc_hist.run(adcs,options,'ADC')
 else:
     if options.verbose: print(
         '--|> Recover data from %s' % (options.saved_histo_directory + options.saved_adc_histo_filename))
@@ -141,13 +98,11 @@ else:
 
 
 if options.perform_adc_fit:
-
     def slice_func(y, x, *args, **kwargs):
         if np.where(y != 0)[0].shape[0] == 0: return [0, 1, 1]
         xmin = np.max(np.argmax(y)-10,0)
         xmax = np.argmax(y)+2
         return [xmin,xmax,1]
-
 
     def p0_func(x,xrange,*args,**kwargs):
         norm = np.sum(x)
@@ -160,7 +115,6 @@ if options.perform_adc_fit:
         min_mean, max_mean = xrange[np.argmax(x) - 2], xrange[np.argmax(x) + 2]
         min_sigma, max_sigma = 1e-6, 1e6
         return ([min_norm, min_mean, min_sigma], [max_norm, max_mean, max_sigma])
-
 
     print('--|> Compute baseline and sigma_e from ADC distributions')
     # Fit the baseline and sigma e of all pixels
@@ -178,53 +132,9 @@ else:
     adcs.fit_function = gaussian
 
 
-
-
 if not options.use_saved_histo_spe:
-    # Reading the file
-    n_evt, n_batch, batch_num, max_evt = 0, 300, 0, 1e8
-    batch = None
-
-    print('--|> Treating the batch #%d of %d events' % (batch_num, n_batch))
-    for file in options.file_list:
-        # Open the file
-        _url = options.directory + options.file_basename % (file)
-        inputfile_reader = zfits.zfits_event_source(
-            url=_url
-            , data_type='r1', max_events=100000)
-
-        if options.verbose: print('--|> Moving to file %s' % (_url))
-        # Loop over event in this file
-        for event in inputfile_reader:
-            n_evt += 1
-            if n_evt > max_evt: break
-            if (n_evt - n_batch * batch_num) % 10 == 0: print(
-                "Progress {:2.1%}".format(float(n_evt - batch_num * n_batch) / n_batch), end="\r")
-            for telid in event.r1.tels_with_data:
-                if n_evt % n_batch == 0:
-                    print('--|> Treating the batch #%d of %d events' % (batch_num, n_batch))
-                    # Update adc histo
-                    spes.fill_with_batch(
-                        spe_peaks_in_event_list(batch, adcs.fit_result[:, 1, 0], adcs.fit_result[:, 2, 0]) )
-                    # Reset the batch
-                    batch = None
-                    batch_num += 1
-                    print('--|> Reading  the batch #%d of %d events' % (batch_num, n_batch))
-                # Get the data
-                data = np.array(list(event.r1.tel[telid].adc_samples.values()))
-                # Append the data to the batch
-                if type(batch).__name__ != 'ndarray':
-                    batch = data.reshape(data.shape[0], 1, data.shape[1])
-                else:
-                    batch = np.append(batch, data.reshape(data.shape[0], 1, data.shape[1]), axis=1)
-
-
-
-
-    if options.verbose: print(
-        '--|> Save the data in %s' % (options.saved_histo_directory + options.saved_spe_histo_filename))
-    np.savez_compressed(options.saved_histo_directory + options.saved_spe_histo_filename,
-                        spes=adcs.data, spes_bin_centers=spes.bin_centers)
+    # Fill the adcs hist from data
+    make_adc_hist.run(spes,options,'SPE')
 else:
     if options.verbose: print(
         '--|> Recover data from %s' % (options.saved_histo_directory + options.saved_spe_histo_filename))
@@ -233,6 +143,52 @@ else:
 
 
 
+def func_multi_all(p, x, config):
+    p_new = [0.] * 12
+    p_new[0] = 0.
+    p_new[1] = p[0]
+    p_new[2] = p[1]
+    p_new[3] = p[2]
+    p_new[4] = p[3]
+    p_new[5] = p[4]
+    p_new[6] = p[5]
+    p_new[7] = p[6]
+    p_new[8] = p[7]
+    p_new[9] = 1.
+    p_new[10] = p[8]
+    p_new[11] = p[9]
+    return multi_gaussian_with0(p_new, x)
+
+if options.perform_spe_fit:
+    def p0_func(*args,config=None,**kwargs):
+        #print([config[2][0] ,0.7 , 5.6, 10000.,1000.,100. , config[1][0] ,0. , 100. ,10.])
+        return [config[2][0] ,0.7 , 5.6, 10000.,1000.,100. , config[1][0] ,0. , 100. ,10.]
+        #return [0.7 , 5.6, 10000.,1000.,100. , 0. , 100. ,10.]
+
+    def bound_func(x,*args,config=None,**kwargs):
+        param_min = [config[2][0]*0.1  ,0.01, 0. , 100.   , 1.    , 0.  ,config[1][0]-3*config[1][1],-10., 0.    ,0.]
+        param_max = [config[2][0]*10.,5. , 100., np.inf, np.inf, np.inf,config[1][0]+3*config[1][1],10. , np.inf,np.inf]
+        #param_min = [0.01, 0. , 100.   , 1.    , 0.  ,-10., 0.    ,0.]
+        #param_max = [5. , 100., np.inf, np.inf, np.inf,10. , np.inf,np.inf]
+        return (param_min, param_max)
+
+    def slice_func(x,*args,**kwargs):
+        if np.where(x != 0)[0].shape[0]==0: return[0,1,1]
+        return [np.where(x != 0)[0][0],np.where(x != 0)[0][-1],1]
+
+    print('--|> Compute Gain, sigma_e, sigma_i from SPE distributions')
+    # Fit the baseline and sigma e of all pixels
+    spes.fit(func_multi_all, p0_func, slice_func, bound_func,config=adcs.fit_result)
+    if options.verbose: print(
+        '--|> Save the data in %s' % (options.saved_histo_directory + options.saved_spe_fit_filename))
+    np.savez_compressed(options.saved_histo_directory + options.saved_spe_fit_filename, spes_fit_results=spes.fit_result)
+else:
+    if options.verbose: print(
+        '--|> Recover data from %s' % (options.saved_histo_directory + options.saved_spe_fit_filename))
+    file = np.load(options.saved_histo_directory + options.saved_spe_fit_filename)
+    spes.fit_result = np.copy(file['spes_fit_results'])
+    spes.fit_function = func_multi_all
+
 
 def display(hists=[adcs,spes],pix_init=700):
     def slice_func(x,*args,**kwargs):
@@ -240,7 +196,7 @@ def display(hists=[adcs,spes],pix_init=700):
 
     fig, ax = plt.subplots(1, 2, figsize=(30, 10))
     plt.subplot(1, 2, 1)
-    vis_baseline = pickable_visu(hists, ax[1], fig, slice_func, True,'log', geom, title='', norm='lin',
+    vis_baseline = pickable_visu(hists, ax[1], fig, slice_func, [True,True],'log', geom, title='', norm='lin',
                                  cmap='viridis', allow_pick=True)
     vis_baseline.add_colorbar()
     vis_baseline.colorbar.set_label('Peak position [4ns]')
@@ -261,3 +217,27 @@ def display(hists=[adcs,spes],pix_init=700):
 
 
 display()
+
+def display_var(hist,title = 'Gain [ADC/p.e.]',index_var = 1,limit_min = 0,limit_max = 10, binwidth = 0.2):
+    f, ax = plt.subplots(1, 2, figsize=(20, 7))
+    plt.subplot(1,2,1)
+    vis_gain = visualization.CameraDisplay( geom, title='', norm='lin', cmap='viridis')
+    vis_gain.add_colorbar()
+    vis_gain.colorbar.set_label(title)
+    h = np.copy(hist.fit_result[:,index_var,0])
+    h_err = np.copy(hist.fit_result[:,index_var,1])
+    h[np.isnan(h_err)]=limit_min
+    h[h<limit_min]=limit_min
+    h[h>limit_max]=limit_max
+    vis_gain.image = h
+    #plt.subplot(1,2,2)
+    hh, bin = np.histogram(h, bins=np.arange(limit_min-binwidth/2, limit_max+1.5*binwidth, binwidth))
+    hh_hist = histogram(data=hh.reshape(1, hh.shape[0]), bin_centers=np.arange(limit_min, limit_max+binwidth, binwidth),xlabel=title,ylabel='$\mathrm{N_{pixel}/%.2f}$'%binwidth,label='All pixels')
+    hh_hist.show(which_hist=(0,) ,axis=ax[1],show_fit=False)
+    plt.show()
+
+
+display_var(spes,title = 'Gain [ADC/p.e.]',index_var = 1,limit_min = 2.,limit_max = 6., binwidth = 0.2)
+display_var(spes,title = '$\sigma_i$ [ADC]',index_var = 0,limit_min = 0.,limit_max = 2., binwidth = 0.05)
+display_var(adcs,title = '$\sigma_e$ [ADC]',index_var = 2,limit_min = 0.,limit_max = 2., binwidth = 0.05)
+display_var(adcs,title = 'Baseline [ADC]',index_var = 1,limit_min = 1950.,limit_max = 2050., binwidth = 10.)

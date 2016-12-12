@@ -49,6 +49,10 @@ parser.add_option( "--saved_histo_filename", dest="saved_histo_filename",
                   help="name of histo file", default='mpes_few.npz')
 parser.add_option( "--saved_fit_filename", dest="saved_fit_filename",
                   help="name of fit file", default='fits_mpes_few.npz')
+parser.add_option( "--saved_spe_fit_filename", dest="saved_spe_fit_filename",
+                  help="name of spe fit file", default='darkrun_spe_fit.npz')
+parser.add_option( "--dark_calibration_directory", dest="dark_calibration_directory",
+                  help="darkrun calibration file directory", default="/data/datasets/CTA/DarkRun/20161130/")
 
 # Arange the options
 (options, args) = parser.parse_args()
@@ -147,9 +151,16 @@ else :
 
 
 # Fit them
-if options.perform_fit:
 
-    def p0_func(y, x, *args,config=None, **kwargs):
+if options.perform_fit:
+    # recover previous fit
+    if options.verbose: print(
+        '--|> Recover data from %s' % (options.dark_calibration_directory + options.saved_spe_fit_filename))
+    file = np.load(options.dark_calibration_directory + options.saved_spe_fit_filename)
+    spes_fit_result = np.copy(file['spes_fit_results'])
+
+
+    def p0_func(y, x, config=None, *args, **kwargs):
 
         threshold = 0.005
         min_dist = 4
@@ -184,17 +195,15 @@ if options.perform_fit:
 
         mu_xt = np.mean(y) / mu / gain - 1
 
-        if mu_xt<0.:mu_xt = 0.
-
         # print([mu, mu_xt, gain, offset, sigma[0], sigma[1]], amplitude)
 
         if config:
 
             if 'baseline' in config:
-                offset = config['baseline']
+                offset = config[6,0]
 
             if 'gain' in config:
-                gain = config['gain']
+                gain = config[2,0]
 
             return [mu, mu_xt, gain, offset, amplitude]
 
@@ -204,28 +213,31 @@ if options.perform_fit:
         return [mu, mu_xt, gain, offset, sigma[0], sigma[1], amplitude]
 
 
-    def bound_func(y, x, *args,config=None,  **kwargs):
-
+    def bound_func(y, x, config=None, *args, **kwargs):
         if config:
-
             param_min = [0., 0., 0., 0., 0.]
             param_max = [np.mean(y), 1, np.inf, np.inf, np.sum(y) + np.sqrt(np.sum(y))]
 
-
         else:
 
-            param_min = [0., 0., 0., -np.inf, 0., 0., 0.]
-            param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.sum(y) + np.sqrt(np.sum(y))]
+            param_min = [0., 0., 0., 0., 0., 0., 0.]
+            param_max = [np.mean(y), 1, np.inf, np.inf, np.inf, np.inf, np.sum(y) + np.sqrt(np.sum(y))]
 
-        return param_min, param_max
+        return (param_min, param_max)
 
 
     def slice_func(y, x, config=None, *args, **kwargs):
         if np.where(y != 0)[0].shape[0] == 0: return [0, 1, 1]
         return [np.where(y != 0)[0][0], np.where(y != 0)[0][-1], 1]
 
+
+    def function(p , x ,*args,config=None,**kwargs):
+        p_new = [p[0],p[1],p[2],config[6,0],config[0,0],p[3],p[4]]
+        return mpe_distribution_general(p_new,x)
+
+
     # Perform the actual fit
-    mpes.fit(mpe_distribution_general,p0_func, slice_func, bound_func,limited_indices=[(0,700,),(1,700,),(2,700,),(3,700,)])
+    mpes.fit(function,p0_func, slice_func, bound_func,config=spes_fit_result limited_indices=[(0,700,),(1,700,),(2,700,),(3,700,)])
 
     # Save the parameters
     if options.verbose: print('--|> Save the fit result in %s' % (options.saved_histo_directory + options.saved_fit_filename))
@@ -239,8 +251,7 @@ else :
 
 # Plot them
 def slice_fun(x, **kwargs):
-    #return [np.where(x != 0)[0][0], np.where(x != 0)[0][-1], 1]
-    return [10,500,1]
+    return [np.where(x != 0)[0][0], np.where(x != 0)[0][-1], 1]
 
 
 def show_level(level,hist):
