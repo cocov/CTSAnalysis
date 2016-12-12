@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
-import matplotlib.pyplot as plt
-import numpy as np
-from ctapipe.io import zfits
 from cts import cameratestsetup as cts
 from utils.geometry import generate_geometry,generate_geometry_0
-from ctapipe.calib.camera import integrators
 from utils.plots import pickable_visu_mpe
 from utils.pdf import mpe_distribution_general
 from optparse import OptionParser
@@ -13,6 +9,7 @@ import peakutils
 from matplotlib import pyplot as plt
 import numpy as np
 from scipy.optimize import curve_fit
+from data_treatement import mpe_hist
 
 parser = OptionParser()
 # Job configuration
@@ -23,34 +20,47 @@ parser.add_option("-q", "--quiet",
 # Setup configuration
 parser.add_option("--cts_sector", dest="cts_sector",
                   help="Sector covered by CTS", default=1,type=int)
+
 parser.add_option("-l", "--scan_level", dest="scan_level",
                   help="list of scans DC level, separated by ',', if only three argument, min,max,step", default="50,80,10")
+
 parser.add_option("-e", "--events_per_level", dest="events_per_level",
                   help="number of events per level", default=3500,type=int)
+
 parser.add_option("-s", "--use_saved_histo", dest="use_saved_histo",action="store_true",
                   help="load the histograms from file", default=False)
+
 parser.add_option("-p", "--perform_fit", dest="perform_fit",action="store_false",
                   help="perform fit of mpe", default=True)
 
 # File management
 parser.add_option("-f", "--file_list", dest="file_list",
                   help="list of string differing in the file name, sperated by ','", default='87,88,89,90,91' )
+
 parser.add_option("-d", "--directory", dest="directory",
                   help="input directory", default="/data/datasets/CTA/LevelScan/20161130/")
+
 parser.add_option( "--file_basename", dest="file_basename",
                   help="file base name ", default="CameraDigicam@localhost.localdomain_0_000.%s.fits.fz")
+
 parser.add_option( "--calibration_filename", dest="calibration_filename",
                   help="calibration file name", default="calib_spe.npz")
+
 parser.add_option( "--calibration_directory", dest="calibration_directory",
                   help="calibration file directory", default="/data/datasets/DarkRun/")
+
 parser.add_option( "--saved_histo_directory", dest="saved_histo_directory",
                   help="directory of histo file", default='/data/datasets/CTA/LevelScan/20161130/')
+
 parser.add_option( "--saved_histo_filename", dest="saved_histo_filename",
                   help="name of histo file", default='mpes_few.npz')
+
 parser.add_option( "--saved_fit_filename", dest="saved_fit_filename",
                   help="name of fit file", default='fits_mpes_few.npz')
+
 parser.add_option( "--saved_spe_fit_filename", dest="saved_spe_fit_filename",
                   help="name of spe fit file", default='darkrun_spe_fit.npz')
+
 parser.add_option( "--dark_calibration_directory", dest="dark_calibration_directory",
                   help="darkrun calibration file directory", default="/data/datasets/CTA/DarkRun/20161130/")
 
@@ -72,9 +82,6 @@ geom = generate_geometry_0()
 # Leave the hand
 plt.ion()
 
-# Get calibration objects
-calib_file = np.load(options.calibration_directory+options.calibration_filename)
-
 # Prepare the mpe histograms
 mpes = histogram(bin_center_min=-100., bin_center_max=3095., bin_width=1., data_shape=(options.scan_level.shape+(1296,)),
                  xlabel='Integrated ADC',ylabel='$\mathrm{N_{entries}}$',label='MPE')
@@ -83,62 +90,11 @@ mpes_peaks = histogram(bin_center_min=-100., bin_center_max=3095., bin_width=1.,
 peaks = histogram(bin_center_min=-1., bin_center_max=51., bin_width=1., data_shape=(options.scan_level.shape+(1296,)),
                   xlabel='Peak maximum position [4ns]', ylabel='$\mathrm{N_{entries}}$', label='MPE')
 
-# Few counters
-level,evt_num,first_evt,first_evt_num = 0,0,True,0
 
 # Where do we take the data from
 if not options.use_saved_histo:
     # Loop over the files
-    for file in options.file_list:
-        if level> len(options.scan_level)-1: break
-        # Get the file
-        _url = options.directory+options.file_basename%(file)
-        inputfile_reader = zfits.zfits_event_source( url= _url,data_type='r1', max_events=100000)
-        if options.verbose: print('--|> Moving to file %s'%(_url))
-        # Loop over event in this file
-        for event in inputfile_reader:
-            if level> len(options.scan_level)-1: break
-            for telid in event.r1.tels_with_data:
-                if first_evt:
-                    first_evt_num = event.r1.tel[telid].eventNumber
-                    first_evt = False
-                evt_num = event.r1.tel[telid].eventNumber-first_evt_num
-                if evt_num % options.events_per_level == 0:
-                    level = int(evt_num / options.events_per_level)
-                    if level> len(options.scan_level)-1: break
-                    if options.verbose: print('--|> Moving to DAC Level %d' % (options.scan_level[level]))
-                if options.verbose and (event.r1.event_id) % 100 == 0:
-                    print("Progress {:2.1%}".format(
-                        (evt_num - level * options.events_per_level) / options.events_per_level), end="\r")
-                # get the data
-                data = np.array(list(event.r1.tel[telid].adc_samples.values()))
-                # subtract the pedestals
-                data = data -  calib_file['baseline'][:,0].reshape(data.shape[0],1)
-                # put in proper format
-                data=data.reshape((1,)+data.shape)
-                # integration parameter
-                params = {"integrator": "nb_peak_integration","integration_window": [8, 4],
-                          "integration_sigamp": [2, 4],"integration_lwt": 0}
-                # now integrate
-                integration, window, peakpos = integrators.simple_integration(data,params)
-                # try with the max instead
-                index_max = (np.arange(0,data[0].shape[0]),np.argmax(data[0], axis=1),)
-                #dim_indices = [np.indices(data[0].shape)[i].reshape(np.prod(data[0].shape)) for i in range(np.indices(data[0].shape).shape[0])]
-                #dim_indices += (i_max,)
-
-
-                # and fill the histos
-                mpes.fill(integration[0],indices=(level,))
-                mpes_peaks.fill(data[0][index_max],indices=(level,))
-                peaks.fill(np.argmax(data[0],axis=1),indices=(level,))
-    # Save the MPE histos in a file
-    mpes._compute_errors()
-    peaks._compute_errors()
-    if options.verbose : print('--|> Save the data in %s' % (options.saved_histo_directory+options.saved_histo_filename))
-    np.savez_compressed(options.saved_histo_directory+options.saved_histo_filename, mpes=mpes.data ,mpes_bin_centers = mpes.bin_centers ,
-                        peaks=peaks.data, peaks_bin_centers=peaks.bin_centers,
-                        mpes_peaks=mpes_peaks.data, mpes_peaks_bin_centers=mpes_peaks.bin_centers
-                        )
+    mpe_hist.run([mpes,mpes_peaks,peaks], options)
 else :
     if options.verbose: print('--|> Recover data from %s' % (options.saved_histo_directory+options.saved_histo_filename))
     file = np.load(options.saved_histo_directory+options.saved_histo_filename)
@@ -237,7 +193,7 @@ if options.perform_fit:
 
 
     # Perform the actual fit
-    mpes.fit(function,p0_func, slice_func, bound_func,config=spes_fit_result limited_indices=[(0,700,),(1,700,),(2,700,),(3,700,)])
+    mpes.fit(function,p0_func, slice_func, bound_func,config=spes_fit_result, limited_indices=[(0,700,),(1,700,),(2,700,),(3,700,)])
 
     # Save the parameters
     if options.verbose: print('--|> Save the fit result in %s' % (options.saved_histo_directory + options.saved_fit_filename))
