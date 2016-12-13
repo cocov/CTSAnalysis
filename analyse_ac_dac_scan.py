@@ -168,7 +168,67 @@ if options.perform_fit:
     adcs_fit_result = np.copy(file['adcs_fit_results'])
 
 
-    def p0_func(y, x, *args, config=None, **kwargs):
+    def p0_func_mpe_low_light(y, x, *args, config=None, **kwargs):
+        threshold = 0.05
+        min_dist = 15
+        peaks_index = peakutils.indexes(y, threshold, min_dist)
+
+        if len(peaks_index) == 0:
+            return [np.nan] * 7
+        amplitude = np.sum(y)
+
+        offset,gain = 0.,1.
+        if type(config).__name__=='ndarray':
+            offset_tmp = config[1]
+            gain_tmp = config[5]
+            sig_tmp = config[2]
+            if np.any(np.isnan(offset_tmp)) or np.any(np.isnan(sig_tmp)) or np.any(np.isnan(gain_tmp)): return [1., 1.,1. , 1., 1.,1.,1.]
+            lin_func = lambda v, off, g : off + g * v
+            popt, pcov = curve_fit(lin_func, np.arange(0, peaks_index.shape[-1], 1),
+                                x[peaks_index],p0=[offset_tmp[0],gain_tmp[0]],
+                                sigma=(np.sqrt(y[peaks_index])),
+                                bounds = ([offset_tmp[0]-3*sig_tmp[0],gain_tmp[0]-5*gain_tmp[1]],[offset_tmp[0]+3*sig_tmp[0],gain_tmp[0]+5*gain_tmp[1]]))
+            offset, gain = popt[0],popt[1]
+            ## if parameters are very different
+            if offset/offset_tmp[0]<0.5 or offset/offset_tmp[0]>2. :
+                return [1., 1.,1. , 1., 1.,1.,1.]
+            if gain/gain_tmp[0]<0.5 or gain/gain_tmp[0]>2. :
+                return [1., 1.,1. , 1., 1.,1.,1.]
+
+        else:
+
+            offset, gain = np.polynomial.polynomial.polyfit(np.arange(0, peaks_index.shape[-1], 1), x[peaks_index],
+                                                            deg=1,
+                                                            w=(np.sqrt(y[peaks_index])))
+
+        sigma_start = np.zeros(peaks_index.shape[-1])
+        for i in range(peaks_index.shape[-1]):
+            start = max(int(peaks_index[i] - gain // 2), 0)  ## Modif to be checked
+            end = min(int(peaks_index[i] + gain // 2), len(x))  ## Modif to be checked
+            if start == end and end < len(x) - 2:
+                end += 1
+            elif start == end:
+                start -= 1
+
+            if i == 0:
+                mu = -np.log(np.sum(y[start:end]) / np.sum(y))
+            temp = np.average(x[start:end], weights=y[start:end])
+            sigma_start[i] = np.sqrt(np.average((x[start:end] - temp) ** 2, weights=y[start:end]))
+
+        bounds = [[0., 0.], [np.inf, np.inf]]
+        sigma_n = lambda x, y, n: np.sqrt(x ** 2 + n * y ** 2)
+        sigma, sigma_error = curve_fit(sigma_n, np.arange(0, peaks_index.shape[-1], 1), sigma_start, bounds=bounds)
+        sigma = sigma / gain
+
+        mu_xt = np.mean(y) / mu / gain - 1
+
+        if mu_xt < 0.: mu_xt = 0.
+
+        return [mu, mu_xt, gain, offset, sigma[0], sigma[1], amplitude]
+
+
+
+    def p0_func_mpe_high_light(y, x, *args, config=None, **kwargs):
         threshold = 0.05
         min_dist = 15
         peaks_index = peakutils.indexes(y, threshold, min_dist)
@@ -282,8 +342,8 @@ if options.perform_fit:
                     ## If yes, fix them all except mu..
                     ## and modify the fit result to get the same shape
                     print('prev input')
+    '''
 
-'''
 
     # Save the parameters
     if options.verbose: print('--|> Save the fit result in %s' % (options.saved_histo_directory + options.saved_fit_filename))

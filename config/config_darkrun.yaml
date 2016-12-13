@@ -1,0 +1,20 @@
+---
+name: dataset_config
+input_directory: /data/datasets/CTA/DATA/20161130/
+base_filename: CameraDigicam@localhost.localdomain_0_000.%s.fits.fz
+cts_sector: 1
+---
+name: darkrun_config
+result_directory: /data/datasets/CTA/DarkRun/20161130/
+filenames: [86]
+adcs_hist_filename: darkrun_adc_hist.npz
+spes_hist_filename: darkrun_spe_hist.npz
+build_adc: False
+build_spe: False
+fit_adc: False
+fit_spe: False
+---
+name: adc_hist_config
+evt_perbatch: 300
+evt_max: 20000
+---
