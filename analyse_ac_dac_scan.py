@@ -2,7 +2,7 @@
 from cts import cameratestsetup as cts
 from utils.geometry import generate_geometry,generate_geometry_0
 from utils.plots import pickable_visu_mpe,pickable_visu_led_mu
-from utils.pdf import mpe_distribution_general
+from utils.pdf import mpe_distribution_general,mpe_distribution_general_sh
 from optparse import OptionParser
 from utils.histogram import histogram
 import peakutils
@@ -63,7 +63,7 @@ parser.add_option( "--saved_histo_peak_filename", dest="saved_histo_peak_filenam
                   help="name of histo file", default='peaks.npz')
 
 parser.add_option( "--saved_fit_filename", dest="saved_fit_filename",
-                  help="name of fit file", default='fits_mpes_few.npz')
+                  help="name of fit file", default='fits_mpes_few_new.npz')
 
 parser.add_option( "--saved_spe_fit_filename", dest="saved_spe_fit_filename",
                   help="name of spe fit file", default='darkrun_spe_fit.npz')
@@ -168,7 +168,8 @@ if options.perform_fit:
     adcs_fit_result = np.copy(file['adcs_fit_results'])
 
 
-    def p0_func_mpe_low_light(y, x, *args, config=None, **kwargs):
+
+    def p0_func(y, x, *args, config=None, **kwargs):
         threshold = 0.05
         min_dist = 15
         peaks_index = peakutils.indexes(y, threshold, min_dist)
@@ -176,31 +177,32 @@ if options.perform_fit:
         if len(peaks_index) == 0:
             return [np.nan] * 7
         amplitude = np.sum(y)
-
+        baseline = 1950
         offset,gain = 0.,1.
         if type(config).__name__=='ndarray':
-            offset_tmp = config[1]
-            gain_tmp = config[5]
-            sig_tmp = config[2]
+            offset_tmp = config[7]
+            baseline_tmp = config[3]
+            gain_tmp = config[2]
+            sig_tmp = config[4]
             if np.any(np.isnan(offset_tmp)) or np.any(np.isnan(sig_tmp)) or np.any(np.isnan(gain_tmp)): return [1., 1.,1. , 1., 1.,1.,1.]
             lin_func = lambda v, off, g : off + g * v
             popt, pcov = curve_fit(lin_func, np.arange(0, peaks_index.shape[-1], 1),
-                                x[peaks_index],p0=[offset_tmp[0],gain_tmp[0]],
+                                x[peaks_index],p0=[baseline_tmp[0],gain_tmp[0]],
                                 sigma=(np.sqrt(y[peaks_index])),
-                                bounds = ([offset_tmp[0]-3*sig_tmp[0],gain_tmp[0]-5*gain_tmp[1]],[offset_tmp[0]+3*sig_tmp[0],gain_tmp[0]+5*gain_tmp[1]]))
+                                bounds = ([baseline_tmp[0]-3*sig_tmp[0],gain_tmp[0]-5*gain_tmp[1]],[baseline_tmp[0]+3*sig_tmp[0],gain_tmp[0]+5*gain_tmp[1]]))
             offset, gain = popt[0],popt[1]
-            ## if parameters are very different
+            baseline = baseline_tmp[0]
+            ## if parametbaseline_tmpers are very different
             if offset/offset_tmp[0]<0.5 or offset/offset_tmp[0]>2. :
-                return [1., 1.,1. , 1., 1.,1.,1.]
+                return [1., 1.,1. , 1., 1.,1.,1.,1.]
             if gain/gain_tmp[0]<0.5 or gain/gain_tmp[0]>2. :
-                return [1., 1.,1. , 1., 1.,1.,1.]
+                return [1., 1.,1. , 1., 1.,1.,1.,1.]
 
         else:
-
             offset, gain = np.polynomial.polynomial.polyfit(np.arange(0, peaks_index.shape[-1], 1), x[peaks_index],
                                                             deg=1,
                                                             w=(np.sqrt(y[peaks_index])))
-
+        mu = 0
         sigma_start = np.zeros(peaks_index.shape[-1])
         for i in range(peaks_index.shape[-1]):
             start = max(int(peaks_index[i] - gain // 2), 0)  ## Modif to be checked
@@ -224,80 +226,21 @@ if options.perform_fit:
 
         if mu_xt < 0.: mu_xt = 0.
 
-        return [mu, mu_xt, gain, offset, sigma[0], sigma[1], amplitude]
-
-
-
-    def p0_func_mpe_high_light(y, x, *args, config=None, **kwargs):
-        threshold = 0.05
-        min_dist = 15
-        peaks_index = peakutils.indexes(y, threshold, min_dist)
-
-        if len(peaks_index) == 0:
-            return [np.nan] * 7
-        amplitude = np.sum(y)
-
-        offset,gain = 0.,1.
-        if type(config).__name__=='ndarray':
-            offset_tmp = config[1]
-            gain_tmp = config[5]
-            sig_tmp = config[2]
-            if np.any(np.isnan(offset_tmp)) or np.any(np.isnan(sig_tmp)) or np.any(np.isnan(gain_tmp)): return [1., 1.,1. , 1., 1.,1.,1.]
-            lin_func = lambda v, off, g : off + g * v
-            popt, pcov = curve_fit(lin_func, np.arange(0, peaks_index.shape[-1], 1),
-                                x[peaks_index],p0=[offset_tmp[0],gain_tmp[0]],
-                                sigma=(np.sqrt(y[peaks_index])),
-                                bounds = ([offset_tmp[0]-3*sig_tmp[0],gain_tmp[0]-5*gain_tmp[1]],[offset_tmp[0]+3*sig_tmp[0],gain_tmp[0]+5*gain_tmp[1]]))
-            offset, gain = popt[0],popt[1]
-            ## if parameters are very different
-            if offset/offset_tmp[0]<0.5 or offset/offset_tmp[0]>2. :
-                return [1., 1.,1. , 1., 1.,1.,1.]
-            if gain/gain_tmp[0]<0.5 or gain/gain_tmp[0]>2. :
-                return [1., 1.,1. , 1., 1.,1.,1.]
-
-        else:
-
-            offset, gain = np.polynomial.polynomial.polyfit(np.arange(0, peaks_index.shape[-1], 1), x[peaks_index],
-                                                            deg=1,
-                                                            w=(np.sqrt(y[peaks_index])))
-
-        sigma_start = np.zeros(peaks_index.shape[-1])
-        for i in range(peaks_index.shape[-1]):
-            start = max(int(peaks_index[i] - gain // 2), 0)  ## Modif to be checked
-            end = min(int(peaks_index[i] + gain // 2), len(x))  ## Modif to be checked
-            if start == end and end < len(x) - 2:
-                end += 1
-            elif start == end:
-                start -= 1
-
-            if i == 0:
-                mu = -np.log(np.sum(y[start:end]) / np.sum(y))
-            temp = np.average(x[start:end], weights=y[start:end])
-            sigma_start[i] = np.sqrt(np.average((x[start:end] - temp) ** 2, weights=y[start:end]))
-
-        bounds = [[0., 0.], [np.inf, np.inf]]
-        sigma_n = lambda x, y, n: np.sqrt(x ** 2 + n * y ** 2)
-        sigma, sigma_error = curve_fit(sigma_n, np.arange(0, peaks_index.shape[-1], 1), sigma_start, bounds=bounds)
-        sigma = sigma / gain
-
-        mu_xt = np.mean(y) / mu / gain - 1
-
-        if mu_xt < 0.: mu_xt = 0.
-
-        return [mu, mu_xt, gain, offset, sigma[0], sigma[1], amplitude]
+        return [mu, mu_xt, gain, baseline, sigma[0], sigma[1], amplitude,offset]
 
 
     def bound_func(y, x, *args, config=None, **kwargs):
-        offset = config[1]
-        gain = config[5]
-        sig = config[2]
+        baseline = config[3]
+        offset = config[7]
+        gain = config[2]
+        sig = config[4]
         if np.any(np.isnan(offset)) or np.any(np.isnan(sig)) or np.any(np.isnan(gain)): return [-np.inf]*7,[np.inf]*7
         if type(config).__name__ == 'ndarray':
-            param_min = [0., 0.,gain[0]-10*gain[1] , offset[0]-3*sig[0], 1.e-2,1.e-2,0.]
-            param_max = [np.inf, 1, gain[0]+10*gain[1], offset[0]+3*sig[0],10., 10.,np.inf]
+            param_min = [0., 0.,gain[0]-10*gain[1] , baseline[0]-3*sig[0], 1.e-2,1.e-2,0.,0.]
+            param_max = [np.inf, 1, gain[0]+10*gain[1], baseline[0]+3*sig[0],10., 10.,np.inf,np.inf]
         else:
-            param_min = [0., 0., 0., -np.inf, 0., 0., 0.]
-            param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.inf]
+            param_min = [0., 0., 0., -np.inf, 0., 0., 0.,0.]
+            param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.inf,np.inf]
 
         return param_min, param_max
 
@@ -312,11 +255,21 @@ if options.perform_fit:
                        np.repeat(spes_fit_result.reshape((1,) + spes_fit_result.shape), mpes_peaks.data.shape[0],
                                  axis=0),
                        axis=2)
+    # reodred
+
+    # amp0,baseline,sigma_e, sigma_e,sigma_i,gain,amp1,amp2,amp3,baseline,offset,amp4,amp5
+    # mu, mu_xt,gain,baseline,sigma_e,sigma_1,amp,offset
+    print(prev_fit.shape)
+    print(prev_fit[0,700,0])
+    prev_fit[...,[0,1,2,3,4,5,6,7,8,9,10,11,12],:] = prev_fit[...,[12,11,5,1,2,4,0,10,3,6,7,8,9],:]
+    print(prev_fit.shape)
+    np.delete(prev_fit,[8,9,10,11,12],axis=2)
+    print(prev_fit.shape)
+    print(prev_fit[0,700,0])
     # Perform the actual fit
-    mpes_peaks.fit(mpe_distribution_general, p0_func, slice_func, bound_func,
-                   config=prev_fit)
-                   #,
-                   #limited_indices=[(level, i,) for i in range(mpes_peaks.data.shape[1])])
+    mpes_peaks.fit(mpe_distribution_general_sh, p0_func, slice_func, bound_func,
+                   config=prev_fit
+                   ,limited_indices=[(3, i,) for i in range(mpes_peaks.data.shape[1])])
     #print(options.scan_level)
     '''
     if False == True:

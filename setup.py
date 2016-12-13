@@ -8,5 +8,5 @@ setup(
     license='',
     author='cocov',
     author_email='',
-    description=''
+    description='', requires=['numpy', 'peakutils']
 )

@@ -75,6 +75,25 @@ def mpe_distribution_general(p, x, config=None):
     return temp * amplitude
 
 
+def mpe_distribution_general_sh(p, x, config=None):
+
+    mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude , offset= p
+
+    #print(p)
+
+    temp = np.zeros(x.shape)
+    x = x - baseline
+    n_peak = 15
+    for n in range(0, n_peak, 1):
+
+        sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2) * gain
+
+        temp += generalized_poisson(n, mu, mu_xt) * gaussian(x, sigma_n, n * gain + (offset if n!=0 else 0))
+
+    return temp * amplitude
+
+
+
 if __name__ == '__main__':
     x = np.arange(0, 200, 1)
     n_peak = 20
