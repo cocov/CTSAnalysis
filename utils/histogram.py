@@ -73,10 +73,6 @@ class histogram :
 
     def _axis_fit( self, idx, func, p0  , slice=None , bounds=None):
         fit_result = None
-        if idx == (700,):
-            print(p0)
-            print(bounds[0])
-            print(bounds[1])
         if self.data[idx][slice[0]:slice[1]:slice[2]].shape == 0:
             fit_result = (np.ones((len(p0), 2)) * np.nan).reshape((1,) + (len(p0), 2))
         else:
@@ -249,9 +245,11 @@ class histogram :
 
         if not which_hist:
             which_hist=(0,)*len(self.data[...,0].shape)
-
+        print(slice)
         if not slice:
             slice=[0,self.bin_centers.shape[0],1]
+        print(slice)
+        print(self.bin_centers[slice[0]:slice[1]:slice[2]])
         x_text = np.min(self.bin_centers[slice[0]:slice[1]:slice[2]])
         y_text = 0.8 *(np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])
 

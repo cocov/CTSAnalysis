@@ -23,7 +23,7 @@ class pickable_visu(visualization.CameraDisplay):
         self.extra_plot.cla()
         colors = ['k','r','b']
         for i,pickable_data in enumerate(self.pickable_datas):
-            slice = self.slice_func(pickable_data.data[pix_id])
+            slice = self.slice_func(pickable_data.data[pix_id]) if self.slice_func else [0,pickable_data.bin_centers.shape[0],1]
             init_func = pickable_data.fit_function
             if i==1:
                 init_func = pickable_data.fit_function

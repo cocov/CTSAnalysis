@@ -4,7 +4,7 @@ from ctapipe.io import zfits
 
 
 # noinspection PyProtectedMember
-def run(hists, options):
+def run(hists, options, peak_positions=None):
     # Few counters
     level, evt_num, first_evt, first_evt_num = 0, 0, True, 0
     for file in options.file_list:
@@ -45,21 +45,37 @@ def run(hists, options):
                 # now integrate
                 integration, window, peakpos = integrators.simple_integration(data, params)
                 # try with the max instead
-                index_max = (np.arange(0, data[0].shape[0]), np.argmax(data[0], axis=1),)
+                peak = np.argmax(data[0], axis=1)
+                if type(peak_positions).__name__ == 'ndarray' :
+                    peak = np.argmax(peak_positions,axis=1)
+                peak_m1 =  peak - 1
+                peak_m1[peak_m1<0]=0
+                peak_p1 =  peak + 1
+                peak_p1[peak_p1>49]=49
+
+
+                index_max = (np.arange(0, data[0].shape[0]), peak,)
+                index_max_m1 = (np.arange(0, data[0].shape[0]), peak_m1,)
+                index_max_p1 = (np.arange(0, data[0].shape[0]), peak_p1,)
+                h = np.append(data[0][index_max].reshape(data[0][index_max].shape+(1,)),
+                              data[0][index_max_m1].reshape(data[0][index_max_m1].shape+(1,)),axis=1)
+                h = np.append(h,
+                              data[0][index_max_p1].reshape(data[0][index_max_p1].shape + (1,)),axis=1)
+
+                max_value = np.max(h,axis=1)
+
                 # and fill the histos
                 hists[0].fill(integration[0], indices=(level,))
-                hists[1].fill(data[0][index_max], indices=(level,))
-                hists[2].fill(np.argmax(data[0], axis=1), indices=(level,))
+                hists[1].fill(max_value, indices=(level,))
 
     # Update the errors
     for hist in hists:
         hist._compute_errors()
     # Save the MPE histos in a file
-
+    print(np.sum(hists[1].data[0][700]))
     if options.verbose:
         print('--|> Save the data in %s' % (options.saved_histo_directory + options.saved_histo_filename))
     np.savez_compressed(options.saved_histo_directory + options.saved_histo_filename, mpes=hists[0].data,
                         mpes_bin_centers=hists[0].bin_centers,
-                        peaks=hists[2].data, peaks_bin_centers=hists[2].bin_centers,
                         mpes_peaks=hists[1].data, mpes_peaks_bin_centers=hists[1].bin_centers
                         )
