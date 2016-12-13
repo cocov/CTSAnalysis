@@ -65,14 +65,13 @@ def run(hists, options, peak_positions=None):
                 max_value = np.max(h,axis=1)
 
                 # and fill the histos
-                hists[0].fill(integration[0], indices=(level,))
-                hists[1].fill(max_value, indices=(level,))
+                if hists[0] : hists[0].fill(integration[0], indices=(level,))
+                if hists[1]: hists[1].fill(max_value, indices=(level,))
 
     # Update the errors
     for hist in hists:
         hist._compute_errors()
     # Save the MPE histos in a file
-    print(np.sum(hists[1].data[0][700]))
     if options.verbose:
         print('--|> Save the data in %s' % (options.saved_histo_directory + options.saved_histo_filename))
     np.savez_compressed(options.saved_histo_directory + options.saved_histo_filename, mpes=hists[0].data,

@@ -26,3 +26,9 @@ for i in range(h.data.shape[1]):
     input('bla')
 #pri
     # nt(h.data)
+
+
+### Functionnalities to test
+## Fill and Fill with batch
+## Fit with and without bounds/config/etc...
+##

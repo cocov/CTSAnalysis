@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from cts import cameratestsetup as cts
 from utils.geometry import generate_geometry,generate_geometry_0
-from utils.plots import pickable_visu_mpe
+from utils.plots import pickable_visu_mpe,pickable_visu_led_mu
 from utils.pdf import mpe_distribution_general
 from optparse import OptionParser
 from utils.histogram import histogram
@@ -23,7 +23,7 @@ parser.add_option("--cts_sector", dest="cts_sector",
                   help="Sector covered by CTS", default=1,type=int)
 
 parser.add_option("-l", "--scan_level", dest="scan_level",
-                  help="list of scans DC level, separated by ',', if only three argument, min,max,step", default="50,80,10")
+                  help="list of scans DC level, separated by ',', if only three argument, min,max,step", default="50,250,10")
 
 parser.add_option("-e", "--events_per_level", dest="events_per_level",
                   help="number of events per level", default=3500,type=int)
@@ -68,6 +68,9 @@ parser.add_option( "--saved_fit_filename", dest="saved_fit_filename",
 parser.add_option( "--saved_spe_fit_filename", dest="saved_spe_fit_filename",
                   help="name of spe fit file", default='darkrun_spe_fit.npz')
 
+parser.add_option( "--saved_adc_fit_filename", dest="saved_adc_fit_filename",
+                  help="name of adc fit file", default='darkrun_adc_fit.npz')
+
 parser.add_option( "--dark_calibration_directory", dest="dark_calibration_directory",
                   help="darkrun calibration file directory", default="/data/datasets/CTA/DarkRun/20161130/")
 
@@ -90,7 +93,7 @@ geom = generate_geometry_0()
 plt.ion()
 
 # Prepare the mpe histograms
-mpes = histogram(bin_center_min=1950.*8, bin_center_max=4095.*8, bin_width=1.,
+mpes = histogram(bin_center_min=1950.*8, bin_center_max=4095.*8, bin_width=8.,
                  data_shape=(options.scan_level.shape+(1296,)),
                  xlabel='Integrated ADC',ylabel='$\mathrm{N_{entries}}$',label='MPE')
 mpes_peaks = histogram(bin_center_min=1950., bin_center_max=4095., bin_width=1.,
@@ -136,7 +139,7 @@ def display(hists, pix_init=700):
     plt.show()
 
 
-display([peaks])
+#display([peaks])
 
 # Where do we take the data from
 if not options.use_saved_histo:
@@ -148,7 +151,7 @@ else :
     mpes = histogram(data=file['mpes'],bin_centers=file['mpes_bin_centers'],xlabel = 'Integrated ADC in sample [4-12]',
                      ylabel='$\mathrm{N_{trigger}}$',label='MPE from integration')
     mpes_peaks = histogram(data   = file['mpes_peaks'], bin_centers=file['mpes_peaks_bin_centers'] ,
-                          xlabel = 'Integrated ADC in sample [4-12]',
+                          xlabel = 'Peak ADC',
                           ylabel = '$\mathrm{N_{trigger}}$',label='MPE from peak value')
 
 # Fit them
@@ -156,9 +159,13 @@ else :
 if options.perform_fit:
     # recover previous fit
     if options.verbose: print(
-        '--|> Recover data from %s' % (options.dark_calibration_directory + options.saved_spe_fit_filename))
+        '--|> Recover fit results from %s' % (options.dark_calibration_directory + options.saved_spe_fit_filename))
     file = np.load(options.dark_calibration_directory + options.saved_spe_fit_filename)
     spes_fit_result = np.copy(file['spes_fit_results'])
+    if options.verbose: print(
+        '--|> Recover fit results from %s' % (options.dark_calibration_directory + options.saved_adc_fit_filename))
+    file = np.load(options.dark_calibration_directory + options.saved_adc_fit_filename)
+    adcs_fit_result = np.copy(file['adcs_fit_results'])
 
 
     def p0_func(y, x, *args, config=None, **kwargs):
@@ -172,16 +179,22 @@ if options.perform_fit:
 
         offset,gain = 0.,1.
         if type(config).__name__=='ndarray':
-            offset = config[1]
-            gain = config[6]
+            offset_tmp = config[1]
+            gain_tmp = config[5]
+            sig_tmp = config[2]
+            if np.any(np.isnan(offset_tmp)) or np.any(np.isnan(sig_tmp)) or np.any(np.isnan(gain_tmp)): return [1., 1.,1. , 1., 1.,1.,1.]
             lin_func = lambda v, off, g : off + g * v
-
             popt, pcov = curve_fit(lin_func, np.arange(0, peaks_index.shape[-1], 1),
-                                x[peaks_index],p0=[offset[0],gain[0]],
+                                x[peaks_index],p0=[offset_tmp[0],gain_tmp[0]],
                                 sigma=(np.sqrt(y[peaks_index])),
-                                bounds = ([offset[0]-offset[1],gain[0]-3*gain[1]],[offset[0]+offset[1],gain[0]+3*gain[1]]))
-
+                                bounds = ([offset_tmp[0]-3*sig_tmp[0],gain_tmp[0]-5*gain_tmp[1]],[offset_tmp[0]+3*sig_tmp[0],gain_tmp[0]+5*gain_tmp[1]]))
             offset, gain = popt[0],popt[1]
+            ## if parameters are very different
+            if offset/offset_tmp[0]<0.5 or offset/offset_tmp[0]>2. :
+                return [1., 1.,1. , 1., 1.,1.,1.]
+            if gain/gain_tmp[0]<0.5 or gain/gain_tmp[0]>2. :
+                return [1., 1.,1. , 1., 1.,1.,1.]
+
         else:
 
             offset, gain = np.polynomial.polynomial.polyfit(np.arange(0, peaks_index.shape[-1], 1), x[peaks_index],
@@ -197,10 +210,8 @@ if options.perform_fit:
             elif start == end:
                 start -= 1
 
-            # print(start,end,y[start:end])
             if i == 0:
                 mu = -np.log(np.sum(y[start:end]) / np.sum(y))
-
             temp = np.average(x[start:end], weights=y[start:end])
             sigma_start[i] = np.sqrt(np.average((x[start:end] - temp) ** 2, weights=y[start:end]))
 
@@ -213,31 +224,17 @@ if options.perform_fit:
 
         if mu_xt < 0.: mu_xt = 0.
 
-        # print([mu, mu_xt, gain, offset, sigma[0], sigma[1]], amplitude)
-        '''
-        if config:
-
-            if 'baseline' in config:
-                offset = config['baseline']
-
-            if 'gain' in config:
-                gain = config['gain']
-
-            return [mu, mu_xt, gain, offset, amplitude]
-
-        # print (gain)
-        # print (mu, mu_xt, gain, offset, sigma[0], sigma[1], amplitude)
-        '''
-
         return [mu, mu_xt, gain, offset, sigma[0], sigma[1], amplitude]
 
 
     def bound_func(y, x, *args, config=None, **kwargs):
         offset = config[1]
-        gain = config[6]
+        gain = config[5]
+        sig = config[2]
+        if np.any(np.isnan(offset)) or np.any(np.isnan(sig)) or np.any(np.isnan(gain)): return [-np.inf]*7,[np.inf]*7
         if type(config).__name__ == 'ndarray':
-            param_min = [0., 0.,gain[0]-3*gain[1] , offset[0]+3*offset[1], 1.e-2,1.e-2,0.]
-            param_max = [np.inf, 1, gain[0]+3*gain[1], 10., 10.,np.sum(y) + np.sqrt(np.sum(y))]
+            param_min = [0., 0.,gain[0]-10*gain[1] , offset[0]-3*sig[0], 1.e-2,1.e-2,0.]
+            param_max = [np.inf, 1, gain[0]+10*gain[1], offset[0]+3*sig[0],10., 10.,np.inf]
         else:
             param_min = [0., 0., 0., -np.inf, 0., 0., 0.]
             param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.inf]
@@ -249,24 +246,57 @@ if options.perform_fit:
         if np.where(y != 0)[0].shape[0] == 0: return [0, 1, 1]
         return [np.where(y != 0)[0][0], np.where(y != 0)[0][-1], 1]
 
-
-
+    prev_fit = np.append(
+                       np.repeat(adcs_fit_result.reshape((1,) + adcs_fit_result.shape), mpes_peaks.data.shape[0],
+                                 axis=0),
+                       np.repeat(spes_fit_result.reshape((1,) + spes_fit_result.shape), mpes_peaks.data.shape[0],
+                                 axis=0),
+                       axis=2)
     # Perform the actual fit
-    mpes.fit(mpe_distribution_general,p0_func, slice_func, bound_func,config=np.append(spes_fit_result, limited_indices=[(0,700,),(1,700,),(2,700,),(3,700,)])
+    mpes_peaks.fit(mpe_distribution_general, p0_func, slice_func, bound_func,
+                   config=prev_fit)
+                   #,
+                   #limited_indices=[(level, i,) for i in range(mpes_peaks.data.shape[1])])
+    #print(options.scan_level)
+    '''
+    if False == True:
+        for level in range(len(options.scan_level)):
+            if level == 0:
+                ## Take from spe fit
+                for pix in range(mpes_peaks[level].shape[0]):
+                    if abs(np.nanmean(mpes_peaks[level,pix])-np.nanmean(adcs[pix]))<0.1:
+                        fit_result = [[0.,0.], [0.,0.], [prev_fit[level,pix,5]], [prev_fit[level,pix,1]],
+                                      [prev_fit[level,pix,2]], [0.01,0.], [1000,0.]]
+                    else:
+                        mpes_peaks[level]._axis_fit(pix, func , p0_func(self.data[indices],self.bin_centers,config=None),
+                                      slice=slice_func(self.data[indices[0]],self.bin_centers,config=None),
+                                      bounds = bound_func(self.data[indices[0]],self.bin_centers,config=None))
+                    ## Check if the mu is different from DC mu
+                    ## if it is... then do not fit and just return the equivalent
+                    ## else run the fit with input DC
+                    print('spe input')
+            else:
+                ## Take from previous
+                for pix in range(mpes_peaks[level].shape[0]):
+                    ## Check wether mpes_peaks.fit_result[level-1][pix][0]> 10
+                    ## If yes, fix them all except mu..
+                    ## and modify the fit result to get the same shape
+                    print('prev input')
+
+'''
 
     # Save the parameters
     if options.verbose: print('--|> Save the fit result in %s' % (options.saved_histo_directory + options.saved_fit_filename))
-    np.savez_compressed(options.saved_histo_directory + options.saved_fit_filename, mpes_fit_results=mpes.fit_result)
+    np.savez_compressed(options.saved_histo_directory + options.saved_fit_filename, mpes_fit_results=mpes_peaks.fit_result)
 else :
     if options.verbose: print('--|> Load the fit result from %s' % (options.saved_histo_directory + options.saved_fit_filename))
     h = np.load(options.saved_histo_directory + options.saved_fit_filename)
-    mpes.fit_result = h['mpes_fit_results']
-    mpes.fit_function = mpe_distribution_general
+    mpes_peaks.fit_result = h['mpes_fit_results']
+    mpes_peaks.fit_function = mpe_distribution_general
 
 
 # Plot them
 def slice_fun(x, **kwargs):
-    print(x,np.sum(x))
     if np.where(x != 0)[0][0]== np.where(x != 0)[0][-1]:return [0,1,1]
     return [np.where(x != 0)[0][0], np.where(x != 0)[0][-1], 1]
 
@@ -274,13 +304,15 @@ def slice_fun(x, **kwargs):
 def show_level(level,hist):
     fig, ax = plt.subplots(1, 2, figsize=(30, 10))
     plt.subplot(1, 2, 1)
-    vis_baseline = pickable_visu_mpe([hist], ax[1], fig, slice_fun, level,False, geom, title='', norm='lin',
+    vis_baseline = pickable_visu_mpe([hist], ax[1], fig, slice_fun, level,True, geom, title='', norm='lin',
                                      cmap='viridis', allow_pick=True)
     vis_baseline.add_colorbar()
     vis_baseline.colorbar.set_label('Peak position [4ns]')
     plt.subplot(1, 2, 1)
-    val = np.mean(hist.data[level],axis=1)
-    print("val",val[700])
+    val = hist.fit_result[3,:,2,0]
+    val[np.isnan(val)]=0
+    val[val<1.]=1.
+    val[val>10.]=10.
     vis_baseline.axes.xaxis.get_label().set_ha('right')
     vis_baseline.axes.xaxis.get_label().set_position((1, 0))
     vis_baseline.axes.yaxis.get_label().set_ha('right')
@@ -293,4 +325,80 @@ def show_level(level,hist):
 
 
 show_level(0,mpes_peaks)
-show_level(0,mpes)
+
+
+
+def show_mu(level,hist):
+    fig, ax = plt.subplots(1, 2, figsize=(30, 10))
+    plt.subplot(1, 2, 1)
+    vis_baseline = pickable_visu_led_mu([hist], ax[1], fig, slice_fun, level,True, geom, title='', norm='lin',
+                                     cmap='viridis', allow_pick=True)
+    vis_baseline.add_colorbar()
+    vis_baseline.colorbar.set_label('Peak position [4ns]')
+    plt.subplot(1, 2, 1)
+    val = hist.fit_result[level,:,2,0]
+    val[np.isnan(val)]=0
+    val[val<1.]=1.
+    val[val>10.]=10.
+    vis_baseline.axes.xaxis.get_label().set_ha('right')
+    vis_baseline.axes.xaxis.get_label().set_position((1, 0))
+    vis_baseline.axes.yaxis.get_label().set_ha('right')
+    vis_baseline.axes.yaxis.get_label().set_position((0, 1))
+    vis_baseline.image = val
+    fig.canvas.mpl_connect('pick_event', vis_baseline._on_pick)
+    vis_baseline.on_pixel_clicked(700)
+    plt.show()
+
+
+from matplotlib.colors import LogNorm
+
+def display_fitparam(hist,param_ind,pix,param_label,range=[0.9,1.1]):
+    fig, ax = plt.subplots(1,2)
+    param = hist.fit_result[:, :, param_ind, 0]
+    param_err = hist.fit_result[:, :, param_ind, 1]
+    param_ratio = np.divide(param, param_err[0])
+    param_ratio[np.isnan(param_ratio)]=0.
+    print(param_ratio.shape)
+    plt.subplot(1,2,1)
+    plt.errorbar(np.arange(50, 260, 10), param_ratio[:,pix], yerr=param_err[:,pix], fmt='ok')
+    plt.ylim(range)
+    plt.ylabel(param_label)
+    plt.xlabel('AC LED DAC')
+    #plt.axes().xaxis.get_label().set_ha('right')
+    #plt.axes().xaxis.get_label().set_position((1, 0))
+    #plt.axes().yaxis.get_label().set_ha('right')
+    #plt.axes().yaxis.get_label().set_position((0, 1))
+    plt.subplot(1,2,2)
+    xaxis = np.repeat(np.arange(50, 260, 10).reshape((1,)+np.arange(50, 260, 10).shape),param.shape[1],axis=0).reshape(np.prod([param_ratio.shape]))
+    y_axis = param_ratio.reshape(np.prod([param_ratio.shape]))
+    plt.hist2d(xaxis,y_axis,bins=20,range=[[50, 250], range],norm=LogNorm())
+    plt.colorbar()
+    plt.show()
+
+def display_fitparam_err(hist,param_ind,pix,param_label,range=[0.9,1.1]):
+    fig, ax = plt.subplots(1,2)
+    param = hist.fit_result[:, :, param_ind, 0]
+    param_err = hist.fit_result[:, :, param_ind, 1]
+    param_ratio = np.divide(param, param[np.nanargmin(param_err,axis=0)])
+    param_ratio[np.isnan(param_ratio)]=0.
+    print(param_ratio.shape)
+    plt.subplot(1,2,1)
+    plt.plot(np.arange(50, 260, 10), param_err[:,pix], color='k')
+    plt.ylim(range)
+    plt.ylabel(param_label)
+    plt.xlabel('AC LED DAC')
+    #plt.axes().xaxis.get_label().set_ha('right')
+    #plt.axes().xaxis.get_label().set_position((1, 0))
+    #plt.axes().yaxis.get_label().set_ha('right')
+    #plt.axes().yaxis.get_label().set_position((0, 1))
+    plt.subplot(1,2,2)
+    xaxis = np.repeat(np.arange(50, 260, 10).reshape((1,)+np.arange(50, 260, 10).shape),param.shape[1],axis=0).reshape(np.prod([param_ratio.shape]))
+    y_axis = param_ratio.reshape(np.prod([param_ratio.shape]))
+    plt.hist2d(xaxis,y_axis,bins=20,range=[[50, 250], range],norm=LogNorm())
+    plt.colorbar()
+    plt.show()
+
+#display_fitparam_err(mpes_peaks,2,700,'Error Gain',[0.9,1.1])
+#show_mu(0,mpes_peaks)
+#display_fitparam(mpes_peaks,1,700,'$\mu_{XT}$',[0.5,2.]) #<N(p.e.)>@DAC=x
+display_fitparam(mpes_peaks,2,700,'Gain',[0.9,1.1]) #<N(p.e.)>@DAC=x

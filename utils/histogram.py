@@ -116,7 +116,10 @@ class histogram :
             indices_list = limited_indices
         for indices in indices_list:
             if type(self.fit_result).__name__ != 'ndarray':
-                self.fit_result = np.ones(data_shape+(len(p0_func(self.data[indices],self.bin_centers,config=config)),2))*np.nan
+                if type(config).__name__!='ndarray':
+                    self.fit_result = np.ones(data_shape+(len(p0_func(self.data[indices],self.bin_centers,config=None)),2))*np.nan
+                else:
+                    self.fit_result = np.ones(data_shape+(len(p0_func(self.data[indices],self.bin_centers,config=config[indices])),2))*np.nan
             print("Fit Progress {:2.1%}".format(count/np.prod(data_shape)), end="\r")
             count+=1
             fit_res = None
@@ -135,6 +138,7 @@ class histogram :
                                          bounds=bound_func(self.data[indices[0]], self.bin_centers,
                                                            config=config[indices[0]]))
                 '''
+
                 fit_res = self._axis_fit(indices, func_reduced,
                                          p0_func(self.data[indices], self.bin_centers, config=config[indices]),
                                          slice=slice_func(self.data[indices], self.bin_centers,
@@ -245,11 +249,8 @@ class histogram :
 
         if not which_hist:
             which_hist=(0,)*len(self.data[...,0].shape)
-        print(slice)
         if not slice:
             slice=[0,self.bin_centers.shape[0],1]
-        print(slice)
-        print(self.bin_centers[slice[0]:slice[1]:slice[2]])
         x_text = np.min(self.bin_centers[slice[0]:slice[1]:slice[2]])
         y_text = 0.8 *(np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])
 
@@ -257,7 +258,6 @@ class histogram :
         precision = int(3)
 
         if show_fit:
-
             for i in range(self.fit_result[which_hist].shape[-2]):
                 text_fit_result += 'p' +str(i) +  ' : ' + str(np.round(self.fit_result[which_hist+(i,0,)],precision))
                 text_fit_result += ' $\pm$ ' + str(np.round(self.fit_result[which_hist+(i,1,)],precision))

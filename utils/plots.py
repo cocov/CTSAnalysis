@@ -99,3 +99,37 @@ class pickable_visu_mpe(visualization.CameraDisplay):
         except ValueError:
             print('some issue to plot')
 
+
+class pickable_visu_led_mu(visualization.CameraDisplay):
+
+    def __init__(self,pickable_datas,extra_plot,figure,slice_func,level,show_fit,*args, **kwargs):
+        super(pickable_visu_led_mu, self).__init__(*args, **kwargs)
+        self.pickable_datas = pickable_datas
+        self.extra_plot = extra_plot
+        self.figure=figure
+        self.slice_func = slice_func
+        self.level=level
+        self.show_fit = show_fit
+
+    def on_pixel_clicked(self, pix_id):
+        legend_handles = []
+        self.pix_id = pix_id
+        self.extra_plot.cla()
+        for i,pickable_data in enumerate(self.pickable_datas):
+            mu = pickable_data.fit_result[:,pix_id,self.level,0]
+            mu_err = pickable_data.fit_result[:,pix_id,self.level,1]
+            print(mu.shape,mu_err.shape)
+            self.extra_plot.errorbar(np.arange(50,260,10),mu,yerr=mu_err,fmt='ok')
+            self.extra_plot.set_ylim(1.e-1,30.)
+            #self.extra_plot.set_yscale('log')
+            self.extra_plot.set_ylabel('<N(p.e.)>@DAC=x')
+            self.extra_plot.set_xlabel('AC LED DAC')
+            self.extra_plot.xaxis.get_label().set_ha('right')
+            self.extra_plot.xaxis.get_label().set_position((1, 0))
+            self.extra_plot.yaxis.get_label().set_ha('right')
+            self.extra_plot.yaxis.get_label().set_position((0, 1))
+            try:
+                self.figure.canvas.draw()
+            except ValueError:
+                print('some issue to plot')
+
