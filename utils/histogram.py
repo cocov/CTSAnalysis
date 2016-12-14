@@ -71,31 +71,83 @@ class histogram :
 
         self._compute_errors()
 
-    def _axis_fit( self, idx, func, p0  , slice=None , bounds=None):
+    def _axis_fit(self, idx, func, p0, slice=None, bounds=None, fixed_param = None, verbose=False):
+        """
+        Perform a fit on this specific histogram
+        :param idx:      the index of the histogram in self.data (type: tuple)
+        :param func:     the fit function                        (type: function)
+        :param p0:       the initial fit parameters              (type: list)
+        :param slice:    the slice of data to fit                (type list)
+        :param bounds:   the boundary for the parameters         (type tuple(list,list))
+        :param fixed_param: the parameters to be fixed and their values (type list(list,list))
+        :return: the fit result                                  (type np.array)
+        """
+        # Reduce the functions parameters according to the fixed_param
+        reduced_p0 = p0
+        reduced_bounds = bounds
+        reduced_func = func
+        #TODO optimize this part
+        if type(fixed_param).__name__ == 'ndarray':
+            def reduced_func(p,x):
+                p_new,j=[],0
+                for i,param in enumerate(p0):
+                    if not(i in fixed_param[0]):
+                        p_new+=[p[j]]
+                        j+=1
+                    else:
+                        for k,val in enumerate(fixed_param[0]):
+                            if val==i: p_new+=[fixed_param[1][k]]
+                return func(p_new,x)
+
+            reduced_p0 = []
+            for i, param in enumerate(p0):
+                if not (i in fixed_param[0]):
+                    reduced_p0 += [param]
+            reduced_bounds = [[],[]]
+            for i, param in enumerate(p0):
+                if not (i in fixed_param[0]):
+                    reduced_bounds[0]+=[bounds[0][i]]
+                    reduced_bounds[1]+=[bounds[1][i]]
+            reduced_bounds=tuple(reduced_bounds )
+
         fit_result = None
-        if self.data[idx][slice[0]:slice[1]:slice[2]].shape == 0:
-            fit_result = (np.ones((len(p0), 2)) * np.nan).reshape((1,) + (len(p0), 2))
+        if slice == [0,0,1] or self.data[idx][slice[0]:slice[1]:slice[2]].shape == 0 or np.any(np.isnan(reduced_p0))\
+                or np.any(np.isnan(reduced_bounds[0])) or np.any(np.isnan(reduced_bounds[1])) \
+                or np.any(np.isnan(p0)):
+            if verbose: print('Bad inputs')
+            fit_result = (np.ones((len(reduced_p0), 2)) * np.nan)
         else:
             if not slice: slice = [0, self.bin_centers.shape[0] - 1, 1]
             try:
                 ## TODO add the chi2 to the fitresult
-
-                residual = lambda p, x, y, y_err: self._residual(func, p, x, y, y_err)
-                out = optimize.least_squares(residual, p0, args=(
+                residual = lambda p, x, y, y_err: self._residual(reduced_func, p, x, y, y_err)
+                out = optimize.least_squares(residual, reduced_p0, args=(
                     self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[idx][slice[0]:slice[1]:slice[2]],
-                    self.errors[idx][slice[0]:slice[1]:slice[2]]), bounds=bounds)
+                    self.errors[idx][slice[0]:slice[1]:slice[2]]), bounds=reduced_bounds)
                 val = out.x
-
                 try:
                     cov = np.sqrt(np.diag(inv(np.dot(out.jac.T, out.jac))))
                     fit_result = np.append(val.reshape(val.shape + (1,)), cov.reshape(cov.shape + (1,)), axis=1)
                 except np.linalg.linalg.LinAlgError as inst:
-                    print(inst)
-                    fit_result = np.append(val.reshape(val.shape + (1,)), np.ones((len(p0), 1)) * np.nan, axis=1)
-                    fit_result = fit_result.reshape((1,) + fit_result.shape)
+                    if verbose: print(inst)
+                    fit_result = np.append(val.reshape(val.shape + (1,)), np.ones((len(reduced_p0), 1)) * np.nan, axis=1)
+
             except Exception as inst:
-                #print('failed fit',inst)
-                fit_result = (np.ones((len(p0), 2)) * np.nan).reshape((1,) + (len(p0), 2))
+                print('failed fit',inst)
+                print(slice)
+                print(reduced_p0)
+                print(reduced_bounds[0])
+                print(reduced_bounds[1])
+                print(p0)
+                print(bounds[0])
+                print(bounds[1])
+                5./0.
+                fit_result = (np.ones((len(reduced_p0), 2)) * np.nan)
+
+        # restore the fixed_params in the fit_result
+        if type(fixed_param).__name__ == 'ndarray':
+            for k,i in enumerate(fixed_param[0]):
+                fit_result=np.insert(fit_result,int(i),[fixed_param[1][k], 0.], axis=0)
         return fit_result
 
     def fit(self,func, p0_func, slice_func, bound_func, config = None , limited_indices = None):

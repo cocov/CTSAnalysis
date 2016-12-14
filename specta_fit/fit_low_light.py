@@ -41,13 +41,22 @@ def p0_func(y, x, *args, config=None, **kwargs):
 
         if i == 0:
             mu = -np.log(np.sum(y[start:end]) / np.sum(y))
-        temp = np.average(x[start:end], weights=y[start:end])
-        sigma_start[i] = np.sqrt(np.average((x[start:end] - temp) ** 2, weights=y[start:end]))
+        try:
+            temp = np.average(x[start:end], weights=y[start:end])
+            sigma_start[i] = np.sqrt(np.average((x[start:end] - temp) ** 2, weights=y[start:end]))
+        except Exception as inst:
+            print(inst)
+            print(y)
+            print(start,end)
+            print(y[start:end])
+            print(np.any(np.isnan(y[start:end])))
+            sigma_start[i] = config[4,0]
+            mu = 5
 
     bounds = [[0., 0.], [np.inf, np.inf]]
     sigma_n = lambda x, y, n: np.sqrt(x ** 2 + n * y ** 2)
     sigma, sigma_error = curve_fit(sigma_n, np.arange(0, peaks_index.shape[-1], 1), sigma_start, bounds=bounds)
-    sigma = sigma ## TODO pb sigma et gain sont correler
+    sigma = sigma
     return [mu, config[1,0], gain, config[3,0], config[4,0], sigma[1], amplitude, config[7,0]]
 
 
@@ -63,26 +72,26 @@ def slice_func(y, x, *args, **kwargs):
     :return: the index to slice the histogram
     """
     # Check that the histogram has none empty values
-    if np.where(x != 0)[0].shape[0] == 0:
-        return [0, 1, 1]
-    return [np.where(x != 0)[0][0], np.where(x != 0)[0][-1], 1]
+    if np.where(y != 0)[0].shape[0] == 0:
+        return []
+    return [np.where(y != 0)[0][0], np.where(y != 0)[0][-1], 1]
 
 
 # noinspection PyUnusedLocal,PyUnusedLocal
-def bounds_func(*args, **kwargs):
+def bounds_func(*args, config=None, **kwargs):
     """
     return the boundaries for the parameters (essentially none for a gaussian)
     :param args:
     :param kwargs:
     :return:
     """
-    offset = config[1]
-    gain = config[5]
-    sig = config[2]
-    if np.any(np.isnan(offset)) or np.any(np.isnan(sig)) or np.any(np.isnan(gain)): return [-np.inf]*7,[np.inf]*7
+    baseline = config[3]
+    gain = config[2]
+    sig = config[4]
+    if np.any(np.isnan(baseline)) or np.any(np.isnan(sig)) or np.any(np.isnan(gain)): return [-np.inf]*7,[np.inf]*7
     if type(config).__name__ == 'ndarray':
-        param_min = [0., 0.,gain[0]-10*gain[1] , offset[0]-3*sig[0], 1.e-2,1.e-2,0.]
-        param_max = [np.inf, 1, gain[0]+10*gain[1], offset[0]+3*sig[0],10., 10.,np.inf]
+        param_min = [0., 0.,gain[0]-10*gain[1] , baseline[0]-3*sig[0], 1.e-4,1.e-4,0.]
+        param_max = [np.inf, 1, gain[0]+10*gain[1], baseline[0]+3*sig[0],10., 10.,np.inf]
     else:
         param_min = [0., 0., 0., -np.inf, 0., 0., 0.]
         param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.inf]

@@ -11,6 +11,7 @@ import numpy as np
 from scipy.optimize import curve_fit
 from data_treatement import mpe_hist,synch_hist
 from utils.plots import pickable_visu
+from specta_fit import fit_low_light,fit_hv_off,fit_dark,fit_high_light
 
 parser = OptionParser()
 # Job configuration
@@ -73,6 +74,8 @@ parser.add_option( "--saved_adc_fit_filename", dest="saved_adc_fit_filename",
 
 parser.add_option( "--dark_calibration_directory", dest="dark_calibration_directory",
                   help="darkrun calibration file directory", default="/data/datasets/CTA/DarkRun/20161130/")
+parser.add_option("--saved_adc_histo_filename", dest="saved_adc_histo_filename",
+                  help="name of histo file", default='darkrun_adc_hist.npz')
 
 # Arange the options
 (options, args) = parser.parse_args()
@@ -166,136 +169,108 @@ if options.perform_fit:
         '--|> Recover fit results from %s' % (options.dark_calibration_directory + options.saved_adc_fit_filename))
     file = np.load(options.dark_calibration_directory + options.saved_adc_fit_filename)
     adcs_fit_result = np.copy(file['adcs_fit_results'])
+    if options.verbose:
+        print('--|> Recover data from %s' % (options.dark_calibration_directory + options.saved_adc_histo_filename))
+    file = np.load(options.dark_calibration_directory + options.saved_adc_histo_filename)
+    adcs = histogram(data=np.copy(file['adcs']), bin_centers=np.copy(file['adcs_bin_centers']))
 
 
-
-    def p0_func(y, x, *args, config=None, **kwargs):
-        threshold = 0.05
-        min_dist = 15
-        peaks_index = peakutils.indexes(y, threshold, min_dist)
-
-        if len(peaks_index) == 0:
-            return [np.nan] * 7
-        amplitude = np.sum(y)
-        baseline = 1950
-        offset,gain = 0.,1.
-        if type(config).__name__=='ndarray':
-            offset_tmp = config[7]
-            baseline_tmp = config[3]
-            gain_tmp = config[2]
-            sig_tmp = config[4]
-            if np.any(np.isnan(offset_tmp)) or np.any(np.isnan(sig_tmp)) or np.any(np.isnan(gain_tmp)): return [1., 1.,1. , 1., 1.,1.,1.]
-            lin_func = lambda v, off, g : off + g * v
-            popt, pcov = curve_fit(lin_func, np.arange(0, peaks_index.shape[-1], 1),
-                                x[peaks_index],p0=[baseline_tmp[0],gain_tmp[0]],
-                                sigma=(np.sqrt(y[peaks_index])),
-                                bounds = ([baseline_tmp[0]-3*sig_tmp[0],gain_tmp[0]-5*gain_tmp[1]],[baseline_tmp[0]+3*sig_tmp[0],gain_tmp[0]+5*gain_tmp[1]]))
-            offset, gain = popt[0],popt[1]
-            baseline = baseline_tmp[0]
-            ## if parametbaseline_tmpers are very different
-            if offset/offset_tmp[0]<0.5 or offset/offset_tmp[0]>2. :
-                return [1., 1.,1. , 1., 1.,1.,1.,1.]
-            if gain/gain_tmp[0]<0.5 or gain/gain_tmp[0]>2. :
-                return [1., 1.,1. , 1., 1.,1.,1.,1.]
-
-        else:
-            offset, gain = np.polynomial.polynomial.polyfit(np.arange(0, peaks_index.shape[-1], 1), x[peaks_index],
-                                                            deg=1,
-                                                            w=(np.sqrt(y[peaks_index])))
-        mu = 0
-        sigma_start = np.zeros(peaks_index.shape[-1])
-        for i in range(peaks_index.shape[-1]):
-            start = max(int(peaks_index[i] - gain // 2), 0)  ## Modif to be checked
-            end = min(int(peaks_index[i] + gain // 2), len(x))  ## Modif to be checked
-            if start == end and end < len(x) - 2:
-                end += 1
-            elif start == end:
-                start -= 1
-
-            if i == 0:
-                mu = -np.log(np.sum(y[start:end]) / np.sum(y))
-            temp = np.average(x[start:end], weights=y[start:end])
-            sigma_start[i] = np.sqrt(np.average((x[start:end] - temp) ** 2, weights=y[start:end]))
-
-        bounds = [[0., 0.], [np.inf, np.inf]]
-        sigma_n = lambda x, y, n: np.sqrt(x ** 2 + n * y ** 2)
-        sigma, sigma_error = curve_fit(sigma_n, np.arange(0, peaks_index.shape[-1], 1), sigma_start, bounds=bounds)
-        sigma = sigma / gain
-
-        mu_xt = np.mean(y) / mu / gain - 1
-
-        if mu_xt < 0.: mu_xt = 0.
-
-        return [mu, mu_xt, gain, baseline, sigma[0], sigma[1], amplitude,offset]
-
-
-    def bound_func(y, x, *args, config=None, **kwargs):
-        baseline = config[3]
-        offset = config[7]
-        gain = config[2]
-        sig = config[4]
-        if np.any(np.isnan(offset)) or np.any(np.isnan(sig)) or np.any(np.isnan(gain)): return [-np.inf]*7,[np.inf]*7
-        if type(config).__name__ == 'ndarray':
-            param_min = [0., 0.,gain[0]-10*gain[1] , baseline[0]-3*sig[0], 1.e-2,1.e-2,0.,0.]
-            param_max = [np.inf, 1, gain[0]+10*gain[1], baseline[0]+3*sig[0],10., 10.,np.inf,np.inf]
-        else:
-            param_min = [0., 0., 0., -np.inf, 0., 0., 0.,0.]
-            param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.inf,np.inf]
-
-        return param_min, param_max
-
-
-    def slice_func(y, x, *args, config=None, **kwargs):
-        if np.where(y != 0)[0].shape[0] == 0: return [0, 1, 1]
-        return [np.where(y != 0)[0][0], np.where(y != 0)[0][-1], 1]
-
-    prev_fit = np.append(
-                       np.repeat(adcs_fit_result.reshape((1,) + adcs_fit_result.shape), mpes_peaks.data.shape[0],
-                                 axis=0),
-                       np.repeat(spes_fit_result.reshape((1,) + spes_fit_result.shape), mpes_peaks.data.shape[0],
-                                 axis=0),
-                       axis=2)
-    # reodred
-
+    prev_fit = np.append( adcs_fit_result.reshape((1,) + adcs_fit_result.shape),
+                          spes_fit_result.reshape((1,) + spes_fit_result.shape),axis=2)
+    # reodred (this will disapear once dark fit is implemented properly)
     # amp0,baseline,sigma_e, sigma_e,sigma_i,gain,amp1,amp2,amp3,baseline,offset,amp4,amp5
-    # mu, mu_xt,gain,baseline,sigma_e,sigma_1,amp,offset
-    print(prev_fit.shape)
-    print(prev_fit[0,700,0])
     prev_fit[...,[0,1,2,3,4,5,6,7,8,9,10,11,12],:] = prev_fit[...,[12,11,5,1,2,4,0,10,3,6,7,8,9],:]
+    prev_fit = np.delete(prev_fit,[8,9,10,11,12],axis=2)
+    # fix the cross talk for now...
+    prev_fit[...,1,:]=[0.08,10.]
     print(prev_fit.shape)
-    np.delete(prev_fit,[8,9,10,11,12],axis=2)
-    print(prev_fit.shape)
-    print(prev_fit[0,700,0])
-    # Perform the actual fit
-    mpes_peaks.fit(mpe_distribution_general_sh, p0_func, slice_func, bound_func,
-                   config=prev_fit
-                   ,limited_indices=[(3, i,) for i in range(mpes_peaks.data.shape[1])])
     #print(options.scan_level)
-    '''
-    if False == True:
-        for level in range(len(options.scan_level)):
-            if level == 0:
-                ## Take from spe fit
-                for pix in range(mpes_peaks[level].shape[0]):
-                    if abs(np.nanmean(mpes_peaks[level,pix])-np.nanmean(adcs[pix]))<0.1:
-                        fit_result = [[0.,0.], [0.,0.], [prev_fit[level,pix,5]], [prev_fit[level,pix,1]],
-                                      [prev_fit[level,pix,2]], [0.01,0.], [1000,0.]]
-                    else:
-                        mpes_peaks[level]._axis_fit(pix, func , p0_func(self.data[indices],self.bin_centers,config=None),
-                                      slice=slice_func(self.data[indices[0]],self.bin_centers,config=None),
-                                      bounds = bound_func(self.data[indices[0]],self.bin_centers,config=None))
-                    ## Check if the mu is different from DC mu
-                    ## if it is... then do not fit and just return the equivalent
-                    ## else run the fit with input DC
-                    print('spe input')
-            else:
-                ## Take from previous
-                for pix in range(mpes_peaks[level].shape[0]):
-                    ## Check wether mpes_peaks.fit_result[level-1][pix][0]> 10
-                    ## If yes, fix them all except mu..
-                    ## and modify the fit result to get the same shape
-                    print('prev input')
-    '''
+
+    #intialise the fit result
+    tmp_shape = prev_fit.shape
+    tmp_shape=mpes_peaks.data.shape[:1]+tmp_shape[1:]
+    print(tmp_shape)
+    mpes_peaks.fit_result = np.ones(tmp_shape)*np.nan
+
+    for level in range(len(options.scan_level)):
+        if options.verbose: print("################################# Level",level)
+        if level == 0:
+            ## Take from spe fit
+            for pix in range(mpes_peaks.data[level].shape[0]):
+                if np.any(np.isnan(mpes_peaks.data[level, pix])):
+                    if options.verbose: print('----> Pix',pix,'abort')
+                    continue
+                elif abs(np.nanmean(mpes_peaks.data[level, pix]) - np.nanmean(adcs.data[pix])) < 0.1:
+                    if options.verbose: print('----> Pix',pix,'as dark')
+                    ## to be replaced by fit_dark
+                    mpes_peaks.fit_result[level,pix] = [[2., 1.e3], [prev_fit[0, pix, 1]], [prev_fit[0, pix, 2]], [prev_fit[0, pix, 3]],
+                                  [prev_fit[0, pix, 4]], [0.7, 10.], [1000, 1.e8],[prev_fit[0, pix, 7]]]
+                else:
+                    if options.verbose: print('----> Pix',pix,'low light')
+                    mpes_peaks.fit_result[level, pix] = \
+                        mpes_peaks._axis_fit((level,pix,),
+                                                    fit_low_light.fit_func,
+                                                    fit_low_light.p0_func(mpes_peaks.data[level,pix],
+                                                                          mpes_peaks.bin_centers,
+                                                                          config=prev_fit[0,pix]),
+                                                    slice=fit_low_light.slice_func(mpes_peaks.data[level,pix],
+                                                                                   mpes_peaks.bin_centers,
+                                                                                   config=prev_fit[0,pix]),
+                                                    bounds=fit_low_light.bounds_func(mpes_peaks.data[level,pix],
+                                                                                     mpes_peaks.bin_centers,
+                                                                                     config=prev_fit[0,pix]),
+                                                    # mu_xt,baseline,sigma_e,offset
+                                                    fixed_param = np.array([[i for i in [1,3,4,7]],[prev_fit[0, pix, i , 0] for i in [1,3,4,7]]])
+                                                    )
+        else:
+            ## Take from previous
+            for pix in range(mpes_peaks.data[level].shape[0]):
+                if np.any(np.isnan(mpes_peaks.data[level, pix])):
+                    if options.verbose: print('----> Pix',pix,'abort')
+                    continue
+
+                elif abs(np.nanmean(mpes_peaks.data[level, pix]) - np.nanmean(adcs.data[pix])) < 0.1:
+                    if options.verbose: print('----> Pix',pix,'as dark')
+                    ## to be replaced by fit_dark
+                    mpes_peaks.fit_result[level,pix] = [[2., 1.e3], [prev_fit[0, pix, 1]], [prev_fit[0, pix, 2]], [prev_fit[0, pix, 3]],
+                                  [prev_fit[0, pix, 4]], [0.7, 10.], [1000, 1.e8],[prev_fit[0, pix, 7]]]
+
+                elif mpes_peaks.fit_result[level-1,pix,0,0]<10.:
+                    if options.verbose: print('----> Pix',pix,'low light')
+                    mpes_peaks.fit_result[level, pix] = \
+                        mpes_peaks._axis_fit((level,pix,),
+                                                    fit_low_light.fit_func,
+                                                    fit_low_light.p0_func(mpes_peaks.data[level, pix],
+                                                                          mpes_peaks.bin_centers,
+                                                                          config=mpes_peaks.fit_result[level-1, pix]),
+                                                    slice=fit_low_light.slice_func(mpes_peaks.data[level, pix],
+                                                                                   mpes_peaks.bin_centers,
+                                                                                   config=mpes_peaks.fit_result[level-1, pix]),
+                                                    bounds=fit_low_light.bounds_func(mpes_peaks.data[level, pix],
+                                                                                     mpes_peaks.bin_centers,
+                                                                                     config=mpes_peaks.fit_result[level-1, pix]),
+                                                    # mu_xt,baseline,sigma_e,offset
+                                                    fixed_param = np.array([[i for i in [1,3,4,7]],[mpes_peaks.fit_result[level-1, pix, i , 0] for i in [1,3,4,7]]])
+                                                    )
+                else:
+                    if options.verbose: print('----> Pix',pix,'high light')
+                    mpes_peaks.fit_result[level, pix] = \
+                        mpes_peaks._axis_fit((level,pix,),
+                                                    fit_high_light.fit_func,
+                                                    fit_high_light.p0_func(mpes_peaks.data[level, pix],
+                                                                          mpes_peaks.bin_centers,
+                                                                          config=mpes_peaks.fit_result[level - 1, pix]),
+                                                    slice=fit_high_light.slice_func(mpes_peaks.data[level, pix],
+                                                                                   mpes_peaks.bin_centers,
+                                                                                   config=mpes_peaks.fit_result[
+                                                                                       level - 1, pix]),
+                                                    bounds=fit_high_light.bounds_func(mpes_peaks.data[level, pix],
+                                                                                     mpes_peaks.bin_centers,
+                                                                                     config=mpes_peaks.fit_result[
+                                                                                         level - 1, pix]),
+                                                    # fix all but mu and amplitude
+                                                    fixed_param=np.array([[i for i in [1,2,3,4,5,7]],[mpes_peaks.fit_result[level-1, pix, i , 0] for i in [1,2,3,4,5,7]]])
+                                                    )
 
 
     # Save the parameters
