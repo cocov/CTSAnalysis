@@ -21,7 +21,7 @@ parser.add_option("-q", "--quiet",
 
 # Setup configuration
 parser.add_option("--cts_sector", dest="cts_sector",
-                  help="Sector covered by CTS", default=1,type=int)
+                  help="Sector covered by CTS", default=3,type=int)
 
 parser.add_option("-l", "--scan_level", dest="scan_level",
                   help="list of scans DC level, separated by ',', if only three argument, min,max,step", default="50,250,10")
@@ -85,7 +85,7 @@ if len(options.scan_level)==3:
     options.scan_level=np.arange(options.scan_level[0],options.scan_level[1]+options.scan_level[2],options.scan_level[2])
 
 # Define Geometry
-sector_to_angle = {1:0.,2:120.,3:240.} #TODO check and put it in cts
+sector_to_angle = {1:120.,2:240.,3:0.} #TODO check and put it in cts
 cts = cts.CTS('/data/software/CTS/config/cts_config_%d.cfg'%(sector_to_angle[options.cts_sector]),
               '/data/software/CTS/config/camera_config.cfg',
               angle=sector_to_angle[options.cts_sector], connected=False)
