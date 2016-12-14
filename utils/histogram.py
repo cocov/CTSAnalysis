@@ -133,7 +133,8 @@ class histogram :
                     fit_result = np.append(val.reshape(val.shape + (1,)), np.ones((len(reduced_p0), 1)) * np.nan, axis=1)
 
             except Exception as inst:
-                print('failed fit',inst)
+                print('failed fit',inst,'index',idx)
+
                 print(slice)
                 print(reduced_p0)
                 print(reduced_bounds[0])
