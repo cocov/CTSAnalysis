@@ -22,7 +22,8 @@ def p0_func(y, x, *args, config=None, **kwargs):
 
     mu = np.average(x, weights=y)-config[3,0]
     amplitude = np.sum(y)
-    return [np.nanmin(9.,mu), config[1,0], config[2,0], config[3,0], config[4,0], config[5,0], amplitude, config[7,0]]
+    if np.isnan(mu ):mu=9.
+    return [mu, config[1,0], config[2,0], config[3,0], config[4,0], config[5,0], amplitude, config[7,0]]
 
 
 
