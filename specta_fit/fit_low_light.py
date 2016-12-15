@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.optimize import curve_fit
 import peakutils
-from utils.pdf import generalized_poisson,gaussian
+import utils.pdf
 
 __all__ = ["p0_func", "slice_func", "bounds_func", "fit_func"]
 
@@ -17,47 +17,66 @@ def p0_func(y, x, *args, config=None, **kwargs):
     :param kwargs: potential unused keyword arguments
     :return: starting points for []
     """
-    if type(config).__name__ != 'ndarray':
-        raise ValueError('The config parameter is mandatory')
+
+    if config==None:
+
+        mu = mu_xt = gain = baseline = sigma_e = sigma_1 = amplitude = offset = np.nan
+        param = [mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset]
+
+    else:
+
+        mu = np.nan
+        mu_xt = config[1, 0]
+        gain = config[2, 0]
+        baseline = config[3, 0]
+        sigma_e = config[4, 0]
+        sigma_1 = np.nan
+        amplitude = np.nan
+        offset = config[7, 0]
+        param = [mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset]
+
+    # Get a primary amplitude to consider
+    param[6] = np.sum(y)
 
     # Get the list of peaks in the histogram
     threshold = 0.05
-    min_dist = 15
-    peaks_index = peakutils.indexes(y, threshold, min_dist)
-    if len(peaks_index) == 0:
-        return [np.nan] * 7
-    # Get a primary amplitude to consider
-    amplitude = np.sum(y)
-    # Get previous estimation of the gain
-    gain = config[2,0]
-    sigma_start = np.zeros(peaks_index.shape[-1])
-    for i in range(peaks_index.shape[-1]):
-        start = max(int(peaks_index[i] - gain // 2), 0)  ## Modif to be checked
-        end = min(int(peaks_index[i] + gain // 2), len(x))  ## Modif to be checked
-        if start == end and end < len(x) - 2:
-            end += 1
-        elif start == end:
-            start -= 1
+    min_dist = param[2] // 2
 
-        if i == 0:
-            mu = -np.log(np.sum(y[start:end]) / np.sum(y))
-        try:
-            temp = np.average(x[start:end], weights=y[start:end])
-            sigma_start[i] = np.sqrt(np.average((x[start:end] - temp) ** 2, weights=y[start:end]))
-        except Exception as inst:
-            print(inst)
-            print(y)
-            print(start,end)
-            print(y[start:end])
-            print(np.any(np.isnan(y[start:end])))
-            sigma_start[i] = config[4,0]
-            mu = 5
+    peak_index = peakutils.indexes(y, threshold, min_dist)
 
-    bounds = [[0., 0.], [np.inf, np.inf]]
-    sigma_n = lambda x, y, n: np.sqrt(x ** 2 + n * y ** 2)
-    sigma, sigma_error = curve_fit(sigma_n, np.arange(0, peaks_index.shape[-1], 1), sigma_start, bounds=bounds)
-    sigma = sigma
-    return [mu, config[1,0], gain, config[3,0], config[4,0], sigma[1], amplitude, config[7,0]]
+    if len(peak_index) == 0:
+        return param
+
+    else:
+
+        photo_peak = np.arange(0, peak_index.shape[-1], 1)
+        param[2] = np.polynomial.polyfit(photo_peak, x[peak_index], deg=1)[1]
+
+        sigma = np.zeros(peak_index.shape[-1])
+        for i in range(sigma.shape[-1]):
+
+            start = max(int(peak_index[i] - param[2] // 2), 0)
+            end = min(int(peak_index[i] + param[2] // 2), len(x))
+
+            if i == 0:
+
+                param[0] = - np.log(np.sum(y[start:end]) / param[6])
+
+            try:
+
+                temp = np.average(x[start:end], weights=y[start:end])
+                sigma[i] = np.sqrt(np.average((x[start:end] - temp) ** 2, weights=y[start:end]))
+
+            except Exception as inst:
+                print('Could not compute weights for sigma !!!')
+                sigma[i] = param[4]
+
+        bounds =
+        sigma_n = lambda sigma_1, n: np.sqrt(param[4] ** 2 + sigma_1 * y ** 2)
+        sigma, sigma_error = curve_fit(sigma_n, photo_peak, sigma, bounds=[0., np.inf])
+        param[5] = sigma / param[2]
+
+        return param
 
 
 
@@ -85,16 +104,27 @@ def bounds_func(*args, config=None, **kwargs):
     :param kwargs:
     :return:
     """
-    baseline = config[3]
-    gain = config[2]
-    sig = config[4]
-    if np.any(np.isnan(baseline)) or np.any(np.isnan(sig)) or np.any(np.isnan(gain)): return [-np.inf]*7,[np.inf]*7
-    if type(config).__name__ == 'ndarray':
-        param_min = [0., 0.,gain[0]-10*gain[1] , baseline[0]-3*sig[0], 1.e-4,1.e-4,0.]
-        param_max = [np.inf, 1, gain[0]+10*gain[1], baseline[0]+3*sig[0],10., 10.,np.inf]
+
+
+    if config==None:
+
+        param_min = [0., 0., 0., -np.inf, 0., 0., 0.,-np.inf]
+        param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.inf,np.inf]
+
+
     else:
-        param_min = [0., 0., 0., -np.inf, 0., 0., 0.]
-        param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.inf]
+
+        mu = config[0]
+        mu_xt = config[1]
+        gain = config[2]
+        baseline = config[3]
+        sigma_e = config[4]
+        sigma_1 = config[5]
+        amplitude = config[6]
+        offset = config[7]
+
+        param_min = [0.    , 0., 0                   , -np.inf                  , 0.                       , 0.     ,0.    ,-np.inf]
+        param_max = [np.inf, 1 , gain[0] + 10*gain[1], baseline[0]+5*baseline[1], sigma_e[0] + 5*sigma_e[1], np.inf ,np.inf, np.inf]
 
     return param_min, param_max
 
@@ -106,14 +136,17 @@ def fit_func(p, x):
     :param x: x
     :return: G(x)
     """
-    mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude , offset= p
+    mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude ,  offset = p
     temp = np.zeros(x.shape)
     x = x - baseline
     n_peak = 15
     for n in range(0, n_peak, 1):
 
-        sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2)
+        sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2) * gain
 
-        temp += generalized_poisson(n, mu, mu_xt) * gaussian(x, sigma_n, n * gain + (offset if n!=0 else 0))
+        temp += utils.pdf.generalized_poisson(n, mu, mu_xt) * utils.pdf.gaussian(x, sigma_n, n * gain)
+        #temp += utils.pdf.generalized_poisson(n, mu, mu_xt) * utils.pdf.gaussian(x, sigma_n, n * gain + (offset if n!=0 else 0))
 
     return temp * amplitude
+
+if __name__ == '__main__':
