@@ -3,7 +3,7 @@ from ctapipe.io import zfits
 from utils.fitting import spe_peaks_in_event_list
 
 
-def run(hist, options, h_type='ADC'):
+def run(hist, options, h_type='ADC',prev_fit_result=None):
     """
     Fill the adcs histogram out of darkrun/baseline runs
     :param h_type: type of histogram to produce: ADC for all samples adcs or SPE for only peaks
@@ -30,7 +30,7 @@ def run(hist, options, h_type='ADC'):
             n_evt += 1
             if n_evt > max_evt: 
                 break
-            if (n_evt - n_batch * batch_num) % 10 == 0: 
+            if (n_evt - n_batch * batch_num) % n_batch/100 == 0:
                 print("Progress {:2.1%}".format(float(n_evt - batch_num * n_batch) / n_batch), end="\r")
             for telid in event.r1.tels_with_data:
                 if n_evt % n_batch == 0:
@@ -40,7 +40,7 @@ def run(hist, options, h_type='ADC'):
                         hist.fill_with_batch(batch.reshape(batch.shape[0], batch.shape[1] * batch.shape[2]))
                     elif h_type == 'SPE':
                         hist.fill_with_batch(
-                            spe_peaks_in_event_list(batch, hist.fit_result[:, 1, 0], hist.fit_result[:, 2, 0]))
+                            spe_peaks_in_event_list(batch, prev_fit_result[:, 1, 0], prev_fit_result[:, 2, 0]))
                     # Reset the batch
                     batch = None
                     batch_num += 1

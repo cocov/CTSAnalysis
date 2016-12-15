@@ -41,13 +41,16 @@ parser.add_option("-d", "--directory", dest="directory",
                   help="input directory", default="/data/datasets/CTA/DATA/20161214/")
 
 parser.add_option("--histo_filename", dest="histo_filename",
-                  help="Histogram SPE file name", default="adc_hv_on.npz")
+                  help="Histogram SPE file name", default="spe_hv_on.npz")
 
 parser.add_option("--output_directory", dest="output_directory",
                   help="directory of histo file", default='/data/datasets/CTA/DarkRun/20161214/')
 
 parser.add_option("--fit_filename", dest="fit_filename",
-                  help="name of fit file with SPE", default='adc_hv_on_fit.npz')
+                  help="name of fit file with SPE", default='spe_hv_on_fit.npz')
+
+parser.add_option("--input_fit_filename", dest="input_fit_filename",
+                  help="Input fit file name", default="adc_hv_off_fit.npz")
 
 # Arrange the options
 (options, args) = parser.parse_args()
@@ -56,16 +59,22 @@ options.file_list = options.file_list.split(',')
 # Define the histograms
 adcs = histogram(bin_center_min=0., bin_center_max=4095., bin_width=1., data_shape=(1296,))
 
+# Get the fit results from the HV OFF run
+if options.verbose:
+    print('--|> Recover data from %s' % (options.output_directory + options.input_fit_filename))
+file = np.load(options.output_directory + options.input_fit_filename)
+prev_fit_result = np.copy(file['adcs_fit_result'])
 
 # Get the adcs
 if not options.use_saved_histo:
     # Fill the adcs hist from data
-    adc_hist.run(adcs, options, 'ADC')
+    adc_hist.run(adcs, options, 'SPE',prev_fit_result=prev_fit_result)
 else:
     if options.verbose:
         print('--|> Recover data from %s' % (options.output_directory + options.histo_filename))
     file = np.load(options.output_directory + options.histo_filename)
     adcs = histogram(data=np.copy(file['adcs']), bin_centers=np.copy(file['adcs_bin_centers']))
+
 
 # Recover fit from the HV off
 if options.perform_fit:
