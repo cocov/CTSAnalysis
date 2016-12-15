@@ -1,7 +1,5 @@
 import numpy as np
-from scipy.optimize import curve_fit
-import peakutils
-from utils.pdf import generalized_poisson,gaussian
+import utils.pdf
 
 __all__ = ["p0_func", "slice_func", "bounds_func", "fit_func"]
 
@@ -17,14 +15,37 @@ def p0_func(y, x, *args, config=None, **kwargs):
     :param kwargs: potential unused keyword arguments
     :return: starting points for []
     """
+
+    if config==None:
+
+        mu = mu_xt = gain = baseline = sigma_e = sigma_1 = amplitude = offset = np.nan
+        param = [mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset]
+
+    else:
+
+        mu = config[0, 0]
+        mu_xt = config[1, 0]
+        gain = config[2, 0]
+        baseline = config[3, 0]
+        sigma_e = config[4, 0]
+        sigma_1 = config[5, 0]
+        amplitude = config[6, 0]
+        offset = config[7, 0]
+        param = [mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset]
+
     if type(config).__name__ != 'ndarray':
         raise ValueError('The config parameter is mandatory')
 
-    mu = np.average(x, weights=y)-config[3,0]
-    amplitude = np.sum(y)
-    if np.isnan(mu ):mu=9.
-    return [mu, config[1,0], config[2,0], config[3,0], config[4,0], config[5,0], amplitude, config[7,0]]
+    print(x)
+    param[0] = np.average(x, weights=y)
+    print(param[0])
+    param[4] = np.sqrt(np.average((x - param[0])**2, weights=y))
+    param[5] = param[4]
+    param[6] = np.sum(y)
 
+    print(param)
+
+    return param
 
 
 # noinspection PyUnusedLocal,PyUnusedLocal,PyUnusedLocal
@@ -51,16 +72,11 @@ def bounds_func(*args, config=None, **kwargs):
     :param kwargs:
     :return:
     """
-    offset = config[1]
-    gain = config[5]
-    sig = config[2]
-    if np.any(np.isnan(offset)) or np.any(np.isnan(sig)) or np.any(np.isnan(gain)): return [-np.inf]*7,[np.inf]*7
-    if type(config).__name__ == 'ndarray':
-        param_min = [0., 0.,gain[0]-10*gain[1] , offset[0]-3*sig[0], 1.e-2,1.e-2,0.]
-        param_max = [np.inf, 1, gain[0]+10*gain[1], offset[0]+3*sig[0],10., 10.,np.inf]
-    else:
-        param_min = [0., 0., 0., -np.inf, 0., 0., 0.]
-        param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.inf]
+
+    param_min = [0., 0., 0., -np.inf, 0., 0., 0., -np.inf]
+    param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]
+
+    print(param_min, param_max)
 
     return param_min, param_max
 
@@ -72,14 +88,7 @@ def fit_func(p, x):
     :param x: x
     :return: G(x)
     """
-    mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude , offset= p
-    temp = np.zeros(x.shape)
-    x = x - baseline
-    n_peak = 15
-    for n in range(0, n_peak, 1):
 
-        sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2)
-
-        temp += generalized_poisson(n, mu, mu_xt) * gaussian(x, sigma_n, n * gain + (offset if n!=0 else 0))
-
-    return temp * amplitude
+    [mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset] = p
+    sigma = sigma_e
+    return amplitude * utils.pdf.gaussian(x, sigma,  mu)
