@@ -1,6 +1,6 @@
 import numpy as np
 from numpy.linalg import inv
-from scipy import optimize
+import scipy.optimize
 from utils.fitting import gaussian_residual,gaussian
 import matplotlib.pyplot as plt
 
@@ -106,8 +106,10 @@ class histogram :
             reduced_bounds = [[],[]]
             for i, param in enumerate(p0):
                 if not (i in fixed_param[0]):
+
                     reduced_bounds[0]+=[bounds[0][i]]
                     reduced_bounds[1]+=[bounds[1][i]]
+
             reduced_bounds=tuple(reduced_bounds )
 
         fit_result = None
@@ -121,27 +123,22 @@ class histogram :
             try:
                 ## TODO add the chi2 to the fitresult
                 residual = lambda p, x, y, y_err: self._residual(reduced_func, p, x, y, y_err)
-                out = optimize.least_squares(residual, reduced_p0, args=(
+                out = scipy.optimize.least_squares(residual, reduced_p0, args=(
                     self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[idx][slice[0]:slice[1]:slice[2]],
                     self.errors[idx][slice[0]:slice[1]:slice[2]]), bounds=reduced_bounds)
+
                 val = out.x
                 try:
                     cov = np.sqrt(np.diag(inv(np.dot(out.jac.T, out.jac))))
                     fit_result = np.append(val.reshape(val.shape + (1,)), cov.reshape(cov.shape + (1,)), axis=1)
                 except np.linalg.linalg.LinAlgError as inst:
                     if verbose: print(inst)
+                    print('Could not compute errors')
                     fit_result = np.append(val.reshape(val.shape + (1,)), np.ones((len(reduced_p0), 1)) * np.nan, axis=1)
 
             except Exception as inst:
                 print('failed fit',inst,'index',idx)
 
-                print(slice)
-                print(reduced_p0)
-                print(reduced_bounds[0])
-                print(reduced_bounds[1])
-                print(p0)
-                print(bounds[0])
-                print(bounds[1])
                 5./0.
                 fit_result = (np.ones((len(reduced_p0), 2)) * np.nan)
 
@@ -326,7 +323,8 @@ class histogram :
         if show_fit:
             reduced_axis = self.bin_centers[slice[0]:slice[1]:slice[2]]
             fit_axis = np.arange(reduced_axis[0],reduced_axis[-1],float(reduced_axis[1]-reduced_axis[0])/10)
-            ax.plot(fit_axis, self.fit_function(self.fit_result[which_hist][:,0], fit_axis), label='fit',color=color)
+            #ax.plot(fit_axis, self.fit_function(self.fit_result[which_hist][:,0], fit_axis), label='fit',color=color)
+            ax.plot(fit_axis, self.fit_function(self.fit_result[which_hist][:,0], fit_axis), label='fit',color='r')
             ax.text(x_text, y_text, text_fit_result)
         if not axis :
             ax.xlabel(self.xlabel)
