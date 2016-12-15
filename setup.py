@@ -8,5 +8,5 @@ setup(
     license='',
     author='cocov',
     author_email='',
-    description='', requires=['numpy', 'peakutils']
+    description='', requires=['numpy', 'peakutils', 'matplotlib', 'ctapipe']
 )

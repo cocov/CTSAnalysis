@@ -53,17 +53,7 @@ def run(hist, options, h_type='ADC'):
                 else:
                     batch = np.append(batch, data.reshape(data.shape[0], 1, data.shape[1]), axis=1)
 
-            '''
-            for telid in event.r1.tels_with_data:
-                if options.verbose and (event.r1.event_id) % 100 == 0:
-                    print("Progress {:2.1%}".format(event.r1.event_id/10000), end="\r")
-                # get the data
-                data = np.array(list(event.r1.tel[telid].adc_samples.values()))
-                # fill with a batch of n_sample
-                hist.fill_with_batch(data)
-            '''
-
     if options.verbose:
-        print('--|> Save the data in %s' % (options.saved_histo_directory + options.saved_adc_histo_filename))
-    np.savez_compressed(options.saved_histo_directory + options.saved_adc_histo_filename,
+        print('--|> Save the data in %s' % (options.output_directory + options.histo_filename))
+    np.savez_compressed(options.output_directory + options.histo_filename,
                         adcs=hist.data, adcs_bin_centers=hist.bin_centers)
