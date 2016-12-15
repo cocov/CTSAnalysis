@@ -33,10 +33,13 @@ def p0_func(y, x, *args, config=None, **kwargs):
         sigma_1 = np.nan
         amplitude = np.nan
         offset = config[7, 0]
+        #variance = config[8, 0]
         param = [mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset]
 
     # Get a primary amplitude to consider
     param[6] = np.sum(y)
+
+#    param[8] = np.sqrt(np.average((x - np.average(x, weights=y))**2, weights=y))
 
     # Get the list of peaks in the histogram
     threshold = 0.05
@@ -50,7 +53,7 @@ def p0_func(y, x, *args, config=None, **kwargs):
     else:
 
         photo_peak = np.arange(0, peak_index.shape[-1], 1)
-        param[2] = np.polynomial.polyfit(photo_peak, x[peak_index], deg=1)[1]
+        param[2] = np.polynomial.polynomial.polyfit(photo_peak, x[peak_index], deg=1)[1]
 
         sigma = np.zeros(peak_index.shape[-1])
         for i in range(sigma.shape[-1]):
@@ -71,8 +74,7 @@ def p0_func(y, x, *args, config=None, **kwargs):
                 print('Could not compute weights for sigma !!!')
                 sigma[i] = param[4]
 
-        bounds =
-        sigma_n = lambda sigma_1, n: np.sqrt(param[4] ** 2 + sigma_1 * y ** 2)
+        sigma_n = lambda sigma_1, n: np.sqrt(param[4] ** 2 + n * sigma_1 ** 2)
         sigma, sigma_error = curve_fit(sigma_n, photo_peak, sigma, bounds=[0., np.inf])
         param[5] = sigma / param[2]
 
@@ -106,7 +108,7 @@ def bounds_func(*args, config=None, **kwargs):
     """
 
 
-    if config==None:
+    if True:
 
         param_min = [0., 0., 0., -np.inf, 0., 0., 0.,-np.inf]
         param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.inf,np.inf]
@@ -136,17 +138,21 @@ def fit_func(p, x):
     :param x: x
     :return: G(x)
     """
-    mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude ,  offset = p
+    #mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset, variance = p
+    mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset = p
     temp = np.zeros(x.shape)
     x = x - baseline
-    n_peak = 15
+    n_peak = 30
     for n in range(0, n_peak, 1):
 
-        sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2) * gain
+        sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2)  * gain
 
-        temp += utils.pdf.generalized_poisson(n, mu, mu_xt) * utils.pdf.gaussian(x, sigma_n, n * gain)
+
+        temp += utils.pdf.generalized_poisson(n, mu, mu_xt) * utils.pdf.gaussian(x , sigma_n, n * gain)
         #temp += utils.pdf.generalized_poisson(n, mu, mu_xt) * utils.pdf.gaussian(x, sigma_n, n * gain + (offset if n!=0 else 0))
 
     return temp * amplitude
 
 if __name__ == '__main__':
+
+    print('Hello')

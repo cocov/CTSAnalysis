@@ -12,9 +12,8 @@ def gaussian(x, sigma, mean, amplitude=1):
 
     return amplitude / np.sqrt(2 * sigma ** 2 * math.pi) * np.exp(-(x - mean) ** 2 / (2 * sigma ** 2))
 
-
 def generalized_poisson(k, mu, mu_xt, amplitude=1):
-    if mu_xt < 0 or mu < 0:
+    if mu_xt < 0 or mu < 0 or k < 0:
 
         if isinstance(k, int):
             return 0
@@ -65,7 +64,7 @@ def mpe_distribution_general(p, x, config=None):
 
     temp = np.zeros(x.shape)
     x = x - offset
-    n_peak = 15
+    n_peak = 40
     for n in range(0, n_peak, 1):
 
         sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2) * gain
@@ -86,7 +85,7 @@ def mpe_distribution_general_sh(p, x, config=None):
     n_peak = 15
     for n in range(0, n_peak, 1):
 
-        sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2) * gain
+        sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2) #* gain
 
         temp += generalized_poisson(n, mu, mu_xt) * gaussian(x, sigma_n, n * gain + (offset if n!=0 else 0))
 
