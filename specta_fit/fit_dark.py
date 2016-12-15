@@ -13,8 +13,8 @@ def p0_func(*args, config=None, **kwargs):
 
 # noinspection PyShadowingNames,PyUnusedLocal,PyUnusedLocal,PyUnusedLocal
 def bounds_func(x, *args, config=None, **kwargs):
-    param_min = [config[2][0] * 0.1, 0.01, 0., 100., 1., 0., config[1][0] - 3 * config[1][1], -10., 0., 0.]
-    param_max = [config[2][0] * 10., 5., 100., np.inf, np.inf, np.inf, config[1][0] + 3 * config[1][1], 10., np.inf,
+    param_min = [config[2][0] * 0.1, 0.01, 0., 100., 1., 0., config[1][0] - config[1][1], -100., 0., 0.]
+    param_max = [config[2][0] * 10., 5., 100., np.inf, np.inf, np.inf, config[1][0] + config[1][1], 100., np.inf,
                  np.inf]
     # param_min = [0.01, 0. , 100.   , 1.    , 0.  ,-10., 0.    ,0.]
     # param_max = [5. , 100., np.inf, np.inf, np.inf,10. , np.inf,np.inf]
@@ -29,7 +29,7 @@ def slice_func(x, *args, **kwargs):
 
 
 # noinspection PyUnusedLocal
-def fit_func(p, x, config):
+def fit_func(p, x, *args, **kwargs):
     p_new = [0.] * 12
     p_new[0] = 0.
     p_new[1] = p[0]

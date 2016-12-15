@@ -134,7 +134,7 @@ class pickable_visu_led_mu(visualization.CameraDisplay):
 
 
 # Some display
-def display(hists, geom,pix_init=700):
+def display(hists, geom,pix_init=700,norm='lin'):
     # noinspection PyShadowingNames,PyShadowingNames,PyUnusedLocal,PyUnusedLocal
     def slice_func(x, *args, **kwargs):
         return [np.where(x != 0)[0][0], np.where(x != 0)[0][-1], 1]
