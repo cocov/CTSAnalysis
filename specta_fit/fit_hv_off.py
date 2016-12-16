@@ -28,9 +28,9 @@ def slice_func(y, x, *args, **kwargs):
     :return: the index to slice the histogram
     """
     # Check that the histogram has none empty values
-    if np.where(x != 0)[0].shape[0] == 0:
+    if np.where(y != 0)[0].shape[0] == 0:
         return [0, 1, 1]
-    return [np.where(x != 0)[0][0], np.where(x != 0)[0][-1], 1]
+    return [np.where(y != 0)[0][1], np.where(y != 0)[0][-1], 1]
 
 
 # noinspection PyUnusedLocal,PyUnusedLocal

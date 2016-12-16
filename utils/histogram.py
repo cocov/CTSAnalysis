@@ -126,7 +126,6 @@ class histogram :
                 out = scipy.optimize.least_squares(residual, reduced_p0, args=(
                     self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[idx][slice[0]:slice[1]:slice[2]],
                     self.errors[idx][slice[0]:slice[1]:slice[2]]), bounds=reduced_bounds)
-
                 val = out.x
                 try:
                     cov = np.sqrt(np.diag(inv(np.dot(out.jac.T, out.jac))))
@@ -175,11 +174,11 @@ class histogram :
             fit_res = None
             if type(config).__name__!='ndarray':
                 fit_res = self._axis_fit( indices , func , p0_func(self.data[indices],self.bin_centers,config=None),
-                                      slice=slice_func(self.data[indices[0]],self.bin_centers,config=None),
-                                      bounds = bound_func(self.data[indices[0]],self.bin_centers,config=None))
+                                      slice=slice_func(self.data[indices],self.bin_centers,config=None),
+                                      bounds = bound_func(self.data[indices],self.bin_centers,config=None))
 
             else:
-                func_reduced = lambda p,x : func(p,x,config[indices])
+                func_reduced = lambda p,x : func(p,x,config=config[indices])
                 '''
                 fit_res = self._axis_fit(indices, func_reduced,
                                          p0_func(self.data[indices], self.bin_centers, config=config[indices[0]]),
@@ -188,7 +187,6 @@ class histogram :
                                          bounds=bound_func(self.data[indices[0]], self.bin_centers,
                                                            config=config[indices[0]]))
                 '''
-
                 fit_res = self._axis_fit(indices, func_reduced,
                                          p0_func(self.data[indices], self.bin_centers, config=config[indices]),
                                          slice=slice_func(self.data[indices], self.bin_centers,
@@ -292,17 +290,22 @@ class histogram :
             self.fit(gaussian, p0_func=p0_func, slice_func=slice_func, bound_func=bound_func, config=config_array)
             # TODO self.fit_text
 
-    def _residual(self,function, p , x , y , y_err):
+    def _residual(self,function, p , x , y , y_err ):
         return (y - function(p, x)) / y_err
 
-    def show(self, which_hist= None , axis=None ,show_fit=False, slice = None, scale='linear', color = 'k', setylim = True ):
+    def show(self, which_hist= None , axis=None ,show_fit=False, slice = None, config = None,scale='linear', color = 'k', setylim = True ):
 
         if not which_hist:
             which_hist=(0,)*len(self.data[...,0].shape)
         if not slice:
             slice=[0,self.bin_centers.shape[0],1]
-        x_text = np.min(self.bin_centers[slice[0]:slice[1]:slice[2]])
-        y_text = 0.8 *(np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])
+        if scale =='log':
+            x_text = np.min(self.bin_centers[slice[0]:slice[1]:slice[2]])+0.5
+            y_text =0.1* (np.min(self.data[which_hist][slice[0]:slice[1]:slice[2]]) + self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])
+
+        else:
+            x_text = np.min(self.bin_centers[slice[0]:slice[1]:slice[2]])
+            y_text = 0.8 *(np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])
 
         text_fit_result = ''
         precision = int(3)
@@ -324,7 +327,10 @@ class histogram :
             reduced_axis = self.bin_centers[slice[0]:slice[1]:slice[2]]
             fit_axis = np.arange(reduced_axis[0],reduced_axis[-1],float(reduced_axis[1]-reduced_axis[0])/10)
             #ax.plot(fit_axis, self.fit_function(self.fit_result[which_hist][:,0], fit_axis), label='fit',color=color)
-            ax.plot(fit_axis, self.fit_function(self.fit_result[which_hist][:,0], fit_axis), label='fit',color='r')
+            reduced_func = self.fit_function
+            if type(config).__name__ == 'ndarray':
+                reduced_func = lambda p,x : self.fit_function(p,x,config= config[which_hist])
+            ax.plot(fit_axis, reduced_func(self.fit_result[which_hist][:,0], fit_axis), label='fit',color='r')
             ax.text(x_text, y_text, text_fit_result)
         if not axis :
             ax.xlabel(self.xlabel)
@@ -348,6 +354,6 @@ class histogram :
                         which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)]) * 1.3)
                 else:
                     ax.set_ylim(1e-1, (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]]) + self.errors[
-                        which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*3)
+                        which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])*10)
         ax.legend(loc='best')
 

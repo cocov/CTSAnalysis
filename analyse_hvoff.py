@@ -95,4 +95,4 @@ geom, good_pixels = generate_geometry(cts)
 # Perform some plots
 display_var(adcs, geom, title='$\sigma_e$ [ADC]', index_var=2, limit_min=0., limit_max=2., bin_width=0.05)
 display_var(adcs, geom, title='Baseline [ADC]', index_var=1, limit_min=1950., limit_max=2050., bin_width=10.)
-display([adcs])
+display([adcs],geom,fit_hv_off.slice_func,norm='linear')

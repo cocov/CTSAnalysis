@@ -6,7 +6,7 @@ from matplotlib.widgets import Button
 
 
 class pickable_visu(visualization.CameraDisplay):
-    def __init__(self, pickable_datas, extra_plot, figure, slice_func, show_fit, axis_scale, *args, **kwargs):
+    def __init__(self, pickable_datas, extra_plot, figure, slice_func, show_fit, axis_scale,config, *args, **kwargs):
         super(pickable_visu, self).__init__(*args, **kwargs)
         self.pickable_datas = pickable_datas
         self.extra_plot = extra_plot
@@ -14,25 +14,30 @@ class pickable_visu(visualization.CameraDisplay):
         self.slice_func = slice_func
         self.show_fit = show_fit
         self.axis_scale = axis_scale
+        self.config = config
 
     def on_pixel_clicked(self, pix_id):
         self.extra_plot.cla()
         colors = ['k', 'r', 'b']
         for i, pickable_data in enumerate(self.pickable_datas):
-            slice = self.slice_func(pickable_data.data[pix_id]) if self.slice_func else [0,
+            slice = self.slice_func(pickable_data.data[pix_id],pickable_data.bin_centers) if self.slice_func else [0,
                                                                                          pickable_data.bin_centers.shape[
-                                                                                             0], 1]
+                                                                                           0], 1]
+            '''
             init_func = pickable_data.fit_function
             if i == 1:
-                init_func = pickable_data.fit_function
+                init_func = lambda p,x : pickable_data.fit_function(p,x,config=self.config)
                 func = lambda p, x: init_func(p, x, self.pickable_datas[0].fit_result[pix_id])
                 pickable_data.fit_function = func
+            '''
 
             pickable_data.show(which_hist=(pix_id,), axis=self.extra_plot,
                                show_fit=self.show_fit[i], slice=slice,
-                               scale=self.axis_scale, color=colors[i], setylim=i == 0)
+                               scale=self.axis_scale, color=colors[i], setylim=i == 0, config = self.config)
+            '''
             if i == 1:
                 pickable_data.fit_function = init_func
+            '''
         try:
             self.figure.canvas.draw()
         except ValueError:
@@ -63,7 +68,7 @@ class pickable_visu_mpe(visualization.CameraDisplay):
         for i, pickable_data in enumerate(self.pickable_datas):
             col = 'k' if i == 0 else 'b'
 
-            slice = self.slice_func(pickable_data.data[self.level, self.pix_id])
+            slice = self.slice_func(pickable_data.data[self.level, self.pix_id],pickable_data.bin_centers)
             pickable_data.show(which_hist=(self.level, self.pix_id,), axis=self.extra_plot, show_fit=self.show_fit,
                                slice=slice)
         try:
@@ -111,6 +116,7 @@ class pickable_visu_led_mu(visualization.CameraDisplay):
         self.show_fit = show_fit
 
     def on_pixel_clicked(self, pix_id):
+        print('clicked',pix_id)
         legend_handles = []
         self.pix_id = pix_id
         self.extra_plot.cla()
@@ -134,22 +140,19 @@ class pickable_visu_led_mu(visualization.CameraDisplay):
 
 
 # Some display
-def display(hists, geom,pix_init=700,norm='lin'):
-    # noinspection PyShadowingNames,PyShadowingNames,PyUnusedLocal,PyUnusedLocal
-    def slice_func(x, *args, **kwargs):
-        return [np.where(x != 0)[0][0], np.where(x != 0)[0][-1], 1]
+def display(hists, geom,slice_func,pix_init=700,norm='lin',config=None):
 
     fig, ax = plt.subplots(1, 2, figsize=(30, 10))
     plt.subplot(1, 2, 1)
-    vis_baseline = pickable_visu(hists, ax[1], fig, slice_func, [True], 'linear', geom, title='', norm='lin',
+    vis_baseline = pickable_visu(hists, ax[1], fig, slice_func, [True], norm,config, geom, title='', norm='lin',
                                  cmap='viridis', allow_pick=True)
     vis_baseline.add_colorbar()
     vis_baseline.colorbar.set_label('Peak position [4ns]')
     plt.subplot(1, 2, 1)
     peak = hists[0].fit_result[:, 2, 0]
-    peak[np.isnan(peak)] = 0
-    peak[peak < 0.3] = 0.3
-    peak[peak > 1.3] = 1.3
+    peak[np.isnan(peak)] = 2.
+    peak[peak < 0.] = 2.
+    peak[peak > 10.] = 8.
 
     vis_baseline.axes.xaxis.get_label().set_ha('right')
     vis_baseline.axes.xaxis.get_label().set_position((1, 0))

@@ -14,68 +14,67 @@ from utils.plots import pickable_visu
 from specta_fit import fit_low_light,fit_hv_off,fit_dark,fit_high_light
 
 parser = OptionParser()
+
 # Job configuration
 parser.add_option("-q", "--quiet",
                   action="store_false", dest="verbose", default=True,
                   help="don't print status messages to stdout")
 
-# Setup configuration
-parser.add_option("--cts_sector", dest="cts_sector",
-                  help="Sector covered by CTS", default=3,type=int)
+parser.add_option("-s", "--use_saved_histo", dest="use_saved_histo", action="store_true",
+                  help="load the mpe histo from file", default=False)
 
-parser.add_option("-l", "--scan_level", dest="scan_level",
-                  help="list of scans DC level, separated by ',', if only three argument, min,max,step", default="50,250,10")
+parser.add_option("-t", "--use_time_saved_histo", dest="use_time_saved_histo", action="store_true",
+                  help="load the mpe histo from file", default=False)
 
-parser.add_option("-e", "--events_per_level", dest="events_per_level",
-                  help="number of events per level", default=3500,type=int)
-
-parser.add_option("-s", "--use_saved_histo", dest="use_saved_histo",action="store_true",
-                  help="load the histograms from file", default=False)
-
-parser.add_option("-t", "--use_saved_histo_peak", dest="use_saved_histo_peak",action="store_true",
-                  help="load the peak histograms from file", default=False)
-
-parser.add_option("-p", "--perform_fit", dest="perform_fit",action="store_false",
+parser.add_option("-p", "--perform_fit", dest="perform_fit", action="store_false",
                   help="perform fit of mpe", default=True)
 
-# File management
 parser.add_option("-f", "--file_list", dest="file_list",
-                  help="list of string differing in the file name, sperated by ','", default='87,88,89,90,91' )
+                  help="input filenames separated by ','", default='124,125,126,127,128,129,130,131,132,133,134,135,136')
 
-parser.add_option("-d", "--directory", dest="directory",
-                  help="input directory", default="/data/datasets/CTA/DATA/20161130/")
+parser.add_option("-l", "--scan_level", dest="scan_level",
+                  help="list of scans DC level, separated by ',', if only three argument, min,max,step", default="0,195,5")
 
-parser.add_option( "--file_basename", dest="file_basename",
+parser.add_option("-e", "--events_per_level", dest="events_per_level",
+                  help="number of events per level", default=5000,type=int)
+
+parser.add_option("--evt_max", dest="evt_max",
+                  help="maximal number of events", default=50000, type=int)
+
+parser.add_option("-n", "--n_evt_per_batch", dest="n_evt_per_batch",
+                  help="number of events per batch", default=1000, type=int)
+
+# Setup configuration
+parser.add_option("--cts_sector", dest="cts_sector",
+                  help="Sector covered by CTS", default=1, type=int)
+
+# File management
+parser.add_option("--file_basename", dest="file_basename",
                   help="file base name ", default="CameraDigicam@localhost.localdomain_0_000.%s.fits.fz")
+parser.add_option("-d", "--directory", dest="directory",
+                  help="input directory", default="/data/datasets/CTA/DATA/20161214/")
 
-parser.add_option( "--calibration_filename", dest="calibration_filename",
-                  help="calibration file name", default="calib_spe.npz")
+parser.add_option("--histo_filename", dest="histo_filename",
+                  help="Histogram SPE file name", default="mpe_scan_0_195_5.npz")
 
-parser.add_option( "--calibration_directory", dest="calibration_directory",
-                  help="calibration file directory", default="/data/datasets/DarkRun/")
+parser.add_option( "--peak_histo_filename", dest="peak_histo_filename",
+                  help="name of peak histo file", default='peaks.npz')
 
-parser.add_option( "--saved_histo_directory", dest="saved_histo_directory",
-                  help="directory of histo file", default='/data/datasets/CTA/LevelScan/20161130/')
+parser.add_option("--output_directory", dest="output_directory",
+                  help="directory of histo file", default='/data/datasets/CTA/LevelScan/20161214/')
 
-parser.add_option( "--saved_histo_filename", dest="saved_histo_filename",
-                  help="name of histo file", default='mpes_few.npz')
+parser.add_option("--fit_filename", dest="fit_filename",
+                  help="name of fit file with MPE", default='mpe_scan_0_195_5_fit.npz')
 
-parser.add_option( "--saved_histo_peak_filename", dest="saved_histo_peak_filename",
-                  help="name of histo file", default='peaks.npz')
+parser.add_option("--input_directory", dest="output_directory",
+                  help="directory of histo file", default='/data/datasets/CTA/DarkRun/20161214/')
 
-parser.add_option( "--saved_fit_filename", dest="saved_fit_filename",
-                  help="name of fit file", default='fits_mpes_few_new.npz')
+parser.add_option("--input_fit_hvoff_filename", dest="input_hvoff_filename",
+                  help="Input fit file name", default="adc_hv_off_fit.npz")
 
-parser.add_option( "--saved_spe_fit_filename", dest="saved_spe_fit_filename",
-                  help="name of spe fit file", default='darkrun_spe_fit.npz')
+parser.add_option("--input_fit_dark_filename", dest="input_dark_filename",
+                  help="Input fit file name", default="spe_hv_on_fit.npz")
 
-parser.add_option( "--saved_adc_fit_filename", dest="saved_adc_fit_filename",
-                  help="name of adc fit file", default='darkrun_adc_fit.npz')
-
-parser.add_option( "--dark_calibration_directory", dest="dark_calibration_directory",
-                  help="darkrun calibration file directory", default="/data/datasets/CTA/DarkRun/20161130/")
-parser.add_option("--saved_adc_histo_filename", dest="saved_adc_histo_filename",
-                  help="name of histo file", default='darkrun_adc_hist.npz')
 
 # Arange the options
 (options, args) = parser.parse_args()
@@ -84,78 +83,76 @@ options.scan_level = [int(level) for level in options.scan_level.split(',')]
 if len(options.scan_level)==3:
     options.scan_level=np.arange(options.scan_level[0],options.scan_level[1]+options.scan_level[2],options.scan_level[2])
 
-# Define Geometry
-sector_to_angle = {1:120.,2:240.,3:0.} #TODO check and put it in cts
-cts = cts.CTS('/data/software/CTS/config/cts_config_%d.cfg'%(sector_to_angle[options.cts_sector]),
-              '/data/software/CTS/config/camera_config.cfg',
-              angle=sector_to_angle[options.cts_sector], connected=False)
-#geom,good_pixels = generate_geometry(cts)
-geom = generate_geometry_0()
-
-# Leave the hand
-plt.ion()
-
 # Prepare the mpe histograms
-mpes = histogram(bin_center_min=1950.*8, bin_center_max=4095.*8, bin_width=8.,
-                 data_shape=(options.scan_level.shape+(1296,)),
-                 xlabel='Integrated ADC',ylabel='$\mathrm{N_{entries}}$',label='MPE')
-mpes_peaks = histogram(bin_center_min=1950., bin_center_max=4095., bin_width=1.,
+mpes = histogram(bin_center_min=1950., bin_center_max=4095., bin_width=1.,
                        data_shape=(options.scan_level.shape+(1296,)),
                  xlabel='Peak ADC',ylabel='$\mathrm{N_{entries}}$',label='MPE')
 
-peaks = histogram(bin_center_min=0.5, bin_center_max=51.5, bin_width=1.,
+peaks = histogram(bin_center_min=0., bin_center_max=50., bin_width=1.,
                   data_shape=((1296,)),
                   xlabel='Peak maximum position [4ns]', ylabel='$\mathrm{N_{entries}}$', label='peak position')
 
 
 # Where do we take the data from
-if not options.use_saved_histo_peak:
+if not options.use_time_saved_histo:
     # Loop over the files
     synch_hist.run(peaks, options)
 else :
     if options.verbose:
-        print('--|> Recover data from %s' % (options.saved_histo_directory+options.saved_histo_peak_filename))
-    file = np.load(options.saved_histo_directory+options.saved_histo_peak_filename)
+        print('--|> Recover data from %s' % (options.output_directory+options.peak_histo_filename))
+    file = np.load(options.output_directory+options.peak_histo_filename)
     peaks = histogram(data=file['peaks'],bin_centers=file['peaks_bin_centers'],xlabel = 'sample [$\mathrm{4 ns^{1}}$]',
                       ylabel = '$\mathrm{N_{trigger}}$',label='synchrone peak position')
 
 
-def display(hists, pix_init=700):
+if not options.use_saved_histo:
+    # Loop over the files
+    mpe_hist.run([mpes], options, peak_positions = peaks.data)
+else :
+    if options.verbose: print('--|> Recover data from %s' % (options.output_directory+options.histo_filename))
+    file = np.load(options.output_directory+options.histo_filename)
+    mpes = histogram(data=file['mpes'],bin_centers=file['mpes_bin_centers'],xlabel = 'Peak ADC',
+                     ylabel='$\mathrm{N_{trigger}}$',label='MPE from peak value')
+
+
+
+
+# Leave the hand
+plt.ion()
+
+# Define Geometry
+sector_to_angle = {1: 120., 2: 240., 3: 0.}
+cts = cts.CTS('/data/software/CTS/config/cts_config_%d.cfg' % (sector_to_angle[options.cts_sector]),
+              '/data/software/CTS/config/camera_config.cfg',
+              angle=sector_to_angle[options.cts_sector], connected=False)
+geom, good_pixels = generate_geometry(cts)
+
+def show_level(level,hist):
     fig, ax = plt.subplots(1, 2, figsize=(30, 10))
     plt.subplot(1, 2, 1)
-    vis_baseline = pickable_visu(hists, ax[1], fig, None, [False], 'linear', geom, title='', norm='lin',
-                                 cmap='viridis', allow_pick=True)
+    vis_baseline = pickable_visu_mpe([hist], ax[1], fig, fit_low_light.slice_func, level,False, geom, title='', norm='lin',
+                                     cmap='viridis', allow_pick=True)
     vis_baseline.add_colorbar()
     vis_baseline.colorbar.set_label('Peak position [4ns]')
     plt.subplot(1, 2, 1)
-    peak = hists[0].data
-
+    val = np.mean(hist.data[0],axis=1)
+    val[np.isnan(val)]=0
+    val[val<1.]=1.
+    val[val>10.]=10.
     vis_baseline.axes.xaxis.get_label().set_ha('right')
     vis_baseline.axes.xaxis.get_label().set_position((1, 0))
     vis_baseline.axes.yaxis.get_label().set_ha('right')
     vis_baseline.axes.yaxis.get_label().set_position((0, 1))
-
-    vis_baseline.image = np.argmax(peak,axis=1)
-    # noinspection PyProtectedMember
+    vis_baseline.image = val
     fig.canvas.mpl_connect('pick_event', vis_baseline._on_pick)
-    vis_baseline.on_pixel_clicked(pix_init)
+    vis_baseline.on_pixel_clicked(700)
     plt.show()
 
 
-#display([peaks])
 
-# Where do we take the data from
-if not options.use_saved_histo:
-    # Loop over the files
-    mpe_hist.run([mpes,mpes_peaks], options, peak_positions = peaks.data)
-else :
-    if options.verbose: print('--|> Recover data from %s' % (options.saved_histo_directory+options.saved_histo_filename))
-    file = np.load(options.saved_histo_directory+options.saved_histo_filename)
-    mpes = histogram(data=file['mpes'],bin_centers=file['mpes_bin_centers'],xlabel = 'Integrated ADC in sample [4-12]',
-                     ylabel='$\mathrm{N_{trigger}}$',label='MPE from integration')
-    mpes_peaks = histogram(data   = file['mpes_peaks'], bin_centers=file['mpes_peaks_bin_centers'] ,
-                          xlabel = 'Peak ADC',
-                          ylabel = '$\mathrm{N_{trigger}}$',label='MPE from peak value')
+show_level(0,mpes)
+'''
+#display([peaks])
 
 # Fit them
 
@@ -390,3 +387,4 @@ def display_fitparam_err(hist,param_ind,pix,param_label,range=[0.9,1.1]):
 #show_mu(0,mpes_peaks)
 #display_fitparam(mpes_peaks,1,700,'$\mu_{XT}$',[0.5,2.]) #<N(p.e.)>@DAC=x
 display_fitparam(mpes_peaks,2,700,'Gain',[0.9,1.1]) #<N(p.e.)>@DAC=x
+'''

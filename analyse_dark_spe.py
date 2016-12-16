@@ -106,6 +106,8 @@ cts = cts.CTS('/data/software/CTS/config/cts_config_%d.cfg' % (sector_to_angle[o
 geom, good_pixels = generate_geometry(cts)
 
 # Perform some plots
-display_var(adcs, geom, title='$\sigma_e$ [ADC]', index_var=2, limit_min=0., limit_max=2., bin_width=0.05)
-display_var(adcs, geom, title='Baseline [ADC]', index_var=1, limit_min=1950., limit_max=2050., bin_width=10.)
-display([adcs],geom,norm='log')
+display_var(adcs, geom, title='$\sigma_e$ [ADC]', index_var=0, limit_min=0., limit_max=1., bin_width=0.05)
+display_var(adcs, geom, title='$\sigma_i$ [ADC]', index_var=1, limit_min=0., limit_max=1., bin_width=0.05)
+display_var(adcs, geom, title='Gain [ADC/p.e.]' , index_var=2, limit_min=2., limit_max=7., bin_width=0.05)
+display_var(adcs, geom, title='Offset to baseline' , index_var=6, limit_min=-100., limit_max=100., bin_width=1)
+display([adcs],geom,fit_dark.slice_func,norm='log',config=prev_fit_result)

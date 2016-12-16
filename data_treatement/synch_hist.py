@@ -2,7 +2,7 @@ import numpy as np
 from ctapipe.io import zfits
 
 
-def run(hist, options, max_evt=350000):
+def run(hist, options, min_evt = 5000.*3 , max_evt=5000*10):
     # Few counters
     evt_num, first_evt, first_evt_num = 0, True, 0
     for file in options.file_list:
@@ -14,6 +14,9 @@ def run(hist, options, max_evt=350000):
             print('--|> Moving to file %s' % _url)
         # Loop over event in this file
         for event in inputfile_reader:
+            if evt_num < min_evt:
+                evt_num += 1
+                continue
             if evt_num > max_evt: break
             for telid in event.r1.tels_with_data:
                 evt_num += 1
@@ -33,7 +36,7 @@ def run(hist, options, max_evt=350000):
     # Save the MPE histos in a file
 
     if options.verbose:
-        print('--|> Save the data in %s' % (options.saved_histo_directory + options.saved_histo_peak_filename))
-    np.savez_compressed(options.saved_histo_directory + options.saved_histo_peak_filename,
+        print('--|> Save the data in %s' % (options.output_directory + options.peak_histo_filename))
+    np.savez_compressed(options.output_directory + options.peak_histo_filename,
                         peaks=hist.data, peaks_bin_centers=hist.bin_centers
                         )
