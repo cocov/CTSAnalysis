@@ -22,7 +22,6 @@ def p0_func(y, x, *args, config=None, **kwargs):
         param = [mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset]
 
     else:
-
         mu = config[0, 0]
         mu_xt = config[1, 0]
         gain = config[2, 0]
@@ -36,14 +35,14 @@ def p0_func(y, x, *args, config=None, **kwargs):
     if type(config).__name__ != 'ndarray':
         raise ValueError('The config parameter is mandatory')
 
-    print(x)
-    param[0] = np.average(x, weights=y)
-    print(param[0])
-    param[4] = np.sqrt(np.average((x - param[0])**2, weights=y))
+    #print(x)
+    param[0] = np.average(x-param[3], weights=y) / param[2]
+    #print(param[0])
+    param[4] = np.sqrt(np.average((x - np.average(x, weights=y))**2, weights=y))/ param[2]
     param[5] = param[4]
     param[6] = np.sum(y)
 
-    print(param)
+    #print(param)
 
     return param
 
@@ -76,7 +75,7 @@ def bounds_func(*args, config=None, **kwargs):
     param_min = [0., 0., 0., -np.inf, 0., 0., 0., -np.inf]
     param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]
 
-    print(param_min, param_max)
+    #print(param_min, param_max)
 
     return param_min, param_max
 
@@ -91,4 +90,5 @@ def fit_func(p, x):
 
     [mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset] = p
     sigma = sigma_e
-    return amplitude * utils.pdf.gaussian(x, sigma,  mu)
+    x = x
+    return amplitude * utils.pdf.gaussian(x, sigma*gain,  mu * (1+mu_xt) * gain + baseline)

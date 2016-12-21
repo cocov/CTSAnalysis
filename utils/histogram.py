@@ -3,6 +3,7 @@ from numpy.linalg import inv
 import scipy.optimize
 from utils.fitting import gaussian_residual,gaussian
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
 
 class histogram :
     """
@@ -295,23 +296,29 @@ class histogram :
     def _residual(self,function, p , x , y , y_err):
         return (y - function(p, x)) / y_err
 
-    def show(self, which_hist= None , axis=None ,show_fit=False, slice = None, scale='linear', color = 'k', setylim = True ):
+    def show(self, which_hist= None , axis=None ,show_fit=False, slice = None, scale='linear', color = 'k', setylim = True, fit_func=None):
 
         if not which_hist:
             which_hist=(0,)*len(self.data[...,0].shape)
         if not slice:
-            slice=[0,self.bin_centers.shape[0],1]
-        x_text = np.min(self.bin_centers[slice[0]:slice[1]:slice[2]])
-        y_text = 0.8 *(np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]])+ self.errors[which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])
+            slice = [np.where(self.data[which_hist] != 0)[0][0], np.where(self.data[which_hist] != 0)[0][-1], 1]
 
         text_fit_result = ''
         precision = int(3)
 
         if show_fit:
+            #print(self.fit_result[which_hist])
             for i in range(self.fit_result[which_hist].shape[-2]):
                 text_fit_result += 'p' +str(i) +  ' : ' + str(np.round(self.fit_result[which_hist+(i,0,)],precision))
                 text_fit_result += ' $\pm$ ' + str(np.round(self.fit_result[which_hist+(i,1,)],precision))
                 text_fit_result += '\n'
+
+
+                #print(self.bin_centers[slice[0]:slice[1]:slice[2]])
+
+                x_text = np.min(self.bin_centers[slice[0]:slice[1]:slice[2]])
+                y_text = 0.8 * (np.max(self.data[which_hist][slice[0]:slice[1]:slice[2]]) - self.errors[
+                    which_hist + (np.argmax(self.data[which_hist][slice[0]:slice[1]:slice[2]]),)])
 
         ax=axis
         if not axis :
@@ -321,10 +328,13 @@ class histogram :
         ax.errorbar(self.bin_centers[slice[0]:slice[1]:slice[2]], self.data[which_hist][slice[0]:slice[1]:slice[2]], yerr=self.errors[which_hist][slice[0]:slice[1]:slice[2]],
                     fmt = 'o'+color,label=self.label)
         if show_fit:
+            gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
             reduced_axis = self.bin_centers[slice[0]:slice[1]:slice[2]]
             fit_axis = np.arange(reduced_axis[0],reduced_axis[-1],float(reduced_axis[1]-reduced_axis[0])/10)
-            #ax.plot(fit_axis, self.fit_function(self.fit_result[which_hist][:,0], fit_axis), label='fit',color=color)
-            ax.plot(fit_axis, self.fit_function(self.fit_result[which_hist][:,0], fit_axis), label='fit',color='r')
+            #ax.plot(fit_axis, self.fit_function(self.fit_result[which_hist][:,0], fit_axis), label='fit',color='r')
+            #ax1 = ax.subplot2grid(shape=(3,1), loc=(0,0), rowspan=2, colspan=1)
+            #ax1 = ax.subplot2grid(shape=(3,1), loc=(2,0), rowspan=1, colspan=1)
+            ax.plot(fit_axis, fit_func(self.fit_result[which_hist][:,0], fit_axis), label='fit',color='r')
             ax.text(x_text, y_text, text_fit_result)
         if not axis :
             ax.xlabel(self.xlabel)
