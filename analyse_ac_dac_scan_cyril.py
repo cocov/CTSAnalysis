@@ -4,6 +4,7 @@ from utils.plots import pickable_visu_mpe, pickable_visu_led_mu
 from utils.pdf import mpe_distribution_general, mpe_distribution_general_sh
 from optparse import OptionParser
 from utils.histogram import histogram
+from data_treatement import synch_hist
 import peakutils
 from matplotlib import pyplot as plt
 import numpy as np
@@ -42,39 +43,35 @@ parser.add_option("-f", "--file_list", dest="file_list",
                   help="list of string differing in the file name, sperated by ','", default='87,88,89,90,91')
 
 parser.add_option("-d", "--directory", dest="directory",
-                  help="input directory", default="/data/datasets/CTA/DATA/20161130/")
+                  help="input directory", default="/data/20161214/")
 
 parser.add_option("--file_basename", dest="file_basename",
                   help="file base name ", default="CameraDigicam@localhost.localdomain_0_000.%s.fits.fz")
 
-parser.add_option("--calibration_filename", dest="calibration_filename",
-                  help="calibration file name", default="calib_spe.npz")
-
-parser.add_option("--calibration_directory", dest="calibration_directory",
-                  help="calibration file directory", default="data/DarkRun/")
 
 parser.add_option("--saved_histo_directory", dest="saved_histo_directory",
-                  help="directory of histo file", default='data/LevelScan/20161130/')
+                  help="directory of histo file", default='data/20161214/')
 
 parser.add_option("--saved_histo_filename", dest="saved_histo_filename",
-                  help="name of histo file", default='mpes_few.npz')
+                  help="name of histo file", default='mpe_scan_0_195_5.npz')
 
 parser.add_option("--saved_histo_peak_filename", dest="saved_histo_peak_filename",
                   help="name of histo file", default='peaks.npz')
 
 parser.add_option("--saved_fit_filename", dest="saved_fit_filename",
-                  help="name of fit file", default='fits_mpes_few_new.npz')
+                  help="name of fit file", default='fits_mpe_scan_0_195_5.npz')
 
 parser.add_option("--saved_spe_fit_filename", dest="saved_spe_fit_filename",
-                  help="name of spe fit file", default='darkrun_spe_fit.npz')
+                  help="name of spe fit file", default='spe_hv_on_fit.npz')
 
 parser.add_option("--saved_adc_fit_filename", dest="saved_adc_fit_filename",
-                  help="name of adc fit file", default='darkrun_adc_fit.npz')
+                  help="name of adc fit file", default='adc_hv_off_fit.npz')
 
 parser.add_option("--dark_calibration_directory", dest="dark_calibration_directory",
-                  help="darkrun calibration file directory", default="data/DarkRun/20161130/")
+                  help="darkrun calibration file directory", default="data/20161214/")
+
 parser.add_option("--saved_adc_histo_filename", dest="saved_adc_histo_filename",
-                  help="name of histo file", default='darkrun_adc_hist.npz')
+                  help="name of histo file", default='adc_hv_off.npz')
 
 # Arange the options
 (options, args) = parser.parse_args()
@@ -148,9 +145,7 @@ else:
     file = np.load(options.saved_histo_directory + options.saved_histo_filename)
     mpes = histogram(data=file['mpes'], bin_centers=file['mpes_bin_centers'], xlabel='Integrated ADC in sample [4-12]',
                      ylabel='$\mathrm{N_{trigger}}$', label='MPE from integration')
-    mpes_peaks = histogram(data=file['mpes_peaks'], bin_centers=file['mpes_peaks_bin_centers'],
-                           xlabel='Peak ADC',
-                           ylabel='$\mathrm{N_{trigger}}$', label='MPE from peak value')
+    print(list(file.keys()))
 
 # Fit them
 
@@ -159,11 +154,12 @@ if options.perform_fit:
     if options.verbose: print(
         '--|> Recover fit results from %s' % (options.dark_calibration_directory + options.saved_spe_fit_filename))
     file = np.load(options.dark_calibration_directory + options.saved_spe_fit_filename)
-    spes_fit_result = np.copy(file['spes_fit_results'])
+
+    spes_fit_result = np.copy(file['adcs_fit_result'])
     if options.verbose: print(
         '--|> Recover fit results from %s' % (options.dark_calibration_directory + options.saved_adc_fit_filename))
     file = np.load(options.dark_calibration_directory + options.saved_adc_fit_filename)
-    adcs_fit_result = np.copy(file['adcs_fit_results'])
+    adcs_fit_result = np.copy(file['adcs_fit_result'])
     if options.verbose:
         print('--|> Recover data from %s' % (options.dark_calibration_directory + options.saved_adc_histo_filename))
     file = np.load(options.dark_calibration_directory + options.saved_adc_histo_filename)
@@ -173,19 +169,20 @@ if options.perform_fit:
                          spes_fit_result.reshape((1,) + spes_fit_result.shape), axis=2)
     # reodred (this will disapear once dark fit is implemented properly)
     # amp0,baseline,sigma_e, sigma_e,sigma_i,gain,amp1,amp2,amp3,baseline,offset,amp4,amp5
+    print(prev_fit)
     prev_fit[..., [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], :] = prev_fit[...,
-                                                                   [12, 11, 5, 1, 2, 4, 0, 10, 3, 6, 7, 8, 9], :]
+                                                                  [12, 11, 5, 1, 2, 4, 0, 10, 3, 6, 7, 8, 9], :]
     prev_fit = np.delete(prev_fit, [8, 9, 10, 11, 12], axis=2)
     # fix the cross talk for now...
-    prev_fit[..., 1, :] = [0.08, 10.]
+    #rev_fit[..., 1, :] = [0.08, 10.]
     #print(prev_fit.shape)
     # print(options.scan_level)
 
     # intialise the fit result
     tmp_shape = prev_fit.shape
-    tmp_shape = mpes_peaks.data.shape[:1] + tmp_shape[1:]
+    tmp_shape = mpes.data.shape[:1] + tmp_shape[1:]
     #print(tmp_shape)
-    mpes_peaks.fit_result = np.ones(tmp_shape) * np.nan
+    mpes.fit_result = np.ones(tmp_shape) * np.nan
 
     #plt.figure()
     #plt.hist(mpes_peaks.data[3, 891])
@@ -198,15 +195,15 @@ if options.perform_fit:
     dark_threshold = 0
     low_light_threshold = 8
 
+    print(mpes.fit_result[:,:])
+
     for level in levels:
         if options.verbose: print("################################# Level", level)
 
         for pix in pixels:
 
-            y = mpes_peaks.data[level, pix]
-            #x = mpes_peaks.bin_centers[level, pix]
-            x = mpes_peaks.bin_centers
-            print(x)
+            y = mpes.data[level, pix]
+            x = mpes.bin_centers
 
             if level==0:
 
@@ -214,11 +211,11 @@ if options.perform_fit:
 
             else:
 
-                prev_fit_result = mpes_peaks.fit_result[level-1, pix]
+                prev_fit_result = mpes.fit_result[level-1, pix]
 
             fit_result = None
 
-            if np.any(np.isnan(mpes_peaks.data[level, pix])):
+            if np.any(np.isnan(mpes.data[level, pix])):
                 if options.verbose: print('----> Pix', pix, 'abort')
                 continue
 
@@ -226,8 +223,8 @@ if options.perform_fit:
 
                 if options.verbose: print('----> Pix', pix, 'as dark')
 
-                fit_result = [[0.5, np.nan], [0.08, np.nan], [5.6, np.nan], [2020, np.nan], [0.07, np.nan], [0.09,np.nan], [3500, np.nan], [0., np.nan]]
-                #fit_result =  mpes_peaks._axis_fit((level, pix,),
+                fit_result = [[0.5, np.nan], [0.08, np.nan], [5.6, np.nan], [2020, np.nan], [0.07, np.nan], [0.09,np.nan], [3500, np.nan], [0., np.nan], [0., np.nan], [0., np.nan], [0., np.nan], [0., np.nan]]
+                #fit_result =  mpes._axis_fit((level, pix,),
                 #                         fit_dark.fit_func,
                 #                        fit_dark.p0_func(y, x, config=None),
                 #                         slice=fit_dark.slice_func(y, x, config=None),
@@ -238,7 +235,7 @@ if options.perform_fit:
 
                 if options.verbose: print('----> Pix', pix, 'low light')
 
-                fit_result = mpes_peaks._axis_fit((level, pix,),
+                fit_result = mpes._axis_fit((level, pix,),
                                          fit_low_light.fit_func,
                                          fit_low_light.p0_func(y, x, config=prev_fit_result),
                                          slice=fit_low_light.slice_func(y, x, config=prev_fit_result),
@@ -249,28 +246,28 @@ if options.perform_fit:
             if level>low_light_threshold: ## High
                 if options.verbose: print('----> Pix', pix, 'high light')
 
-                fit_result = mpes_peaks._axis_fit((level, pix,),
+                fit_result = mpes._axis_fit((level, pix,),
                                          fit_high_light.fit_func,
                                          fit_high_light.p0_func(y, x, config=prev_fit_result),
                                          slice=fit_high_light.slice_func(y, x, config=prev_fit_result),
                                          bounds=fit_high_light.bounds_func(y, x, config=prev_fit_result),
                                          fixed_param=None)
 
-            mpes_peaks.fit_result[level, pix] = fit_result
+            mpes.fit_result[level, pix] = fit_result
 
     # Save the parameters
-    #print(mpes_peaks.fit_result[levels,pixels])
+    #print(mpes.fit_result[levels,pixels])
     if options.verbose: print(
         '--|> Save the fit result in %s' % (options.saved_histo_directory + options.saved_fit_filename))
     np.savez_compressed(options.saved_histo_directory + options.saved_fit_filename,
-                        mpes_fit_results=mpes_peaks.fit_result)
+                        mpes_fit_results=mpes.fit_result)
 else:
     if options.verbose: print(
         '--|> Load the fit result from %s' % (options.saved_histo_directory + options.saved_fit_filename))
     h = np.load(options.saved_histo_directory + options.saved_fit_filename)
-    mpes_peaks.fit_result = h['mpes_fit_results']
-    mpes_peaks.fit_function = fit_low_light.fit_func
-    print(mpes_peaks.fit_result[:, 700])
+    mpes.fit_result = h['mpes_fit_results']
+    mpes.fit_function = fit_low_light.fit_func
+    print(mpes.fit_result[:, 700])
 
 
 # Plot them
@@ -301,7 +298,7 @@ def show_level(level_start, pix_start, hist):
     plt.show()
 
 
-show_level(level_start=0, pix_start=700, hist=mpes_peaks)
+show_level(level_start=0, pix_start=700, hist=mpes)
 
 
 def show_mu(level, hist):
@@ -379,7 +376,7 @@ def display_fitparam_err(hist, param_ind, pix, param_label, range=[0.9, 1.1]):
     plt.show()
 
 
-# display_fitparam_err(mpes_peaks,2,700,'Error Gain',[0.9,1.1])
-# show_mu(0,mpes_peaks)
-# display_fitparam(mpes_peaks,1,700,'$\mu_{XT}$',[0.5,2.]) #<N(p.e.)>@DAC=x
-# display_fitparam(mpes_peaks, 2, 700, 'Gain', [0.9, 1.1])  # <N(p.e.)>@DAC=x
+# display_fitparam_err(mpes,2,700,'Error Gain',[0.9,1.1])
+# show_mu(0,mpes)
+# display_fitparam(mpes,1,700,'$\mu_{XT}$',[0.5,2.]) #<N(p.e.)>@DAC=x
+# display_fitparam(mpes, 2, 700, 'Gain', [0.9, 1.1])  # <N(p.e.)>@DAC=x

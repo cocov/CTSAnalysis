@@ -1,20 +1,49 @@
 import numpy as np
+import utils.pdf
 
 __all__ = ["p0_func", "slice_func", "bounds_func", "fit_func"]
 
 
 # noinspection PyUnusedLocal,PyUnusedLocal
-def p0_func(y, x, *args, **kwargs):
+def p0_func(y, x, *args, config=None, **kwargs):
     """
-    return the parameters for a pure gaussian distribution
+    find the parameters to start a mpe fit with low light
     :param y: the histogram values
     :param x: the histogram bins
-    :param args:
-    :param kwargs:
-    :return: starting points for [norm,mean,std]
+    :param args: potential unused positionnal arguments
+    :param config: should be the fit result of a previous fit
+    :param kwargs: potential unused keyword arguments
+    :return: starting points for []
     """
-    if np.average(x, weights=y)==0 and np.average((x - np.average(x, weights=y)) ** 2, weights=y)==0: return [np.nan,np.nan,np.nan]
-    return [np.sum(y), np.average(x, weights=y), np.average((x - np.average(x, weights=y)) ** 2, weights=y)]
+
+    if config==None:
+
+        mu = mu_xt = gain = baseline = sigma_e = sigma_1 = amplitude = offset = np.nan
+        param = [mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset]
+
+    else:
+
+        mu = config[0, 0]
+        mu_xt = config[1, 0]
+        gain = config[2, 0]
+        baseline = config[3, 0]
+        sigma_e = config[4, 0]
+        sigma_1 = config[5, 0]
+        amplitude = config[6, 0]
+        offset = config[7, 0]
+        param = [mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset]
+
+    if type(config).__name__ != 'ndarray':
+        raise ValueError('The config parameter is mandatory')
+    param[0] = np.average(x, weights=y) / gain
+    #print(param[0])
+    param[4] = np.sqrt(np.average((x - np.average(x, weights=y))**2, weights=y)) / gain
+    param[5] = param[4]
+    param[6] = np.sum(y)
+
+    #print(param)
+
+    return param
 
 
 # noinspection PyUnusedLocal,PyUnusedLocal,PyUnusedLocal
@@ -34,14 +63,20 @@ def slice_func(y, x, *args, **kwargs):
 
 
 # noinspection PyUnusedLocal,PyUnusedLocal
-def bounds_func(*args, **kwargs):
+def bounds_func(*args, config=None, **kwargs):
     """
     return the boundaries for the parameters (essentially none for a gaussian)
     :param args:
     :param kwargs:
     :return:
     """
-    return [-np.inf, -np.inf, -np.inf], [np.inf, np.inf, np.inf]
+
+    param_min = [0., 0., 0., -np.inf, 0., 0., 0., -np.inf]
+    param_max = [np.inf, 1, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]
+
+    #print(param_min, param_max)
+
+    return param_min, param_max
 
 
 def fit_func(p, x):
@@ -51,4 +86,7 @@ def fit_func(p, x):
     :param x: x
     :return: G(x)
     """
-    return p[0] / p[2] / np.sqrt(2. * np.pi) * np.exp(-(np.asfarray(x) - p[1]) ** 2 / (2. * p[2] ** 2))
+
+    [mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset] = p
+    sigma = sigma_e * gain
+    return amplitude * utils.pdf.gaussian(x, sigma,  baseline)

@@ -25,6 +25,9 @@ def p0_func(y, x, *args, config=None, **kwargs):
 
     else:
 
+        #print(config)
+        #print(config[0][1])
+
         mu = np.nan
         mu_xt = config[1, 0]
         gain = config[2, 0]
@@ -142,7 +145,7 @@ def fit_func(p, x):
     mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset = p
     temp = np.zeros(x.shape)
     x = x - baseline
-    n_peak = 30
+    n_peak = 40
     for n in range(0, n_peak, 1):
 
         sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2)  * gain
