@@ -30,16 +30,17 @@ parser.add_option("-p", "--perform_fit", dest="perform_fit", action="store_false
                   help="perform fit of mpe", default=True)
 
 parser.add_option("-f", "--file_list", dest="file_list",
-                  help="input filenames separated by ','", default='124,125,126,127,128,129,130,131,132,133,134,135,136')
+                  help="input filenames separated by ','", default='124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149')
+                  #default='')
 
 parser.add_option("-l", "--scan_level", dest="scan_level",
-                  help="list of scans DC level, separated by ',', if only three argument, min,max,step", default="0,195,5")
+                  help="list of scans DC level, separated by ',', if only three argument, min,max,step", default="0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180, 185, 190, 195, 200, 210, 220, 230, 240, 250, 260, 270, 280, 290, 300, 310, 320, 330, 340, 350, 360, 370, 380, 390, 400, 410, 420, 430, 440, 450, 460, 470, 480, 490, 500, 510, 520, 530, 540, 550, 560, 570, 580, 590, 600")
 
 parser.add_option("-e", "--events_per_level", dest="events_per_level",
                   help="number of events per level", default=5000,type=int)
 
 parser.add_option("--evt_max", dest="evt_max",
-                  help="maximal number of events", default=50000, type=int)
+                  help="maximal number of events", default=5e10, type=int)
 
 parser.add_option("-n", "--n_evt_per_batch", dest="n_evt_per_batch",
                   help="number of events per batch", default=1000, type=int)
@@ -55,7 +56,7 @@ parser.add_option("-d", "--directory", dest="directory",
                   help="input directory", default="/data/datasets/CTA/DATA/20161214/")
 
 parser.add_option("--histo_filename", dest="histo_filename",
-                  help="Histogram SPE file name", default="mpe_scan_0_195_5.npz")
+                  help="Histogram SPE file name", default="mpe_scan_0_195_5_200_600_10.npz")
 
 parser.add_option( "--peak_histo_filename", dest="peak_histo_filename",
                   help="name of peak histo file", default='peaks.npz')
@@ -64,7 +65,7 @@ parser.add_option("--output_directory", dest="output_directory",
                   help="directory of histo file", default='/data/datasets/CTA/LevelScan/20161214/')
 
 parser.add_option("--fit_filename", dest="fit_filename",
-                  help="name of fit file with MPE", default='mpe_scan_0_195_5_fit.npz')
+                  help="name of fit file with MPE", default='mpe_scan_200_600_10_fit.npz')
 
 parser.add_option("--input_directory", dest="output_directory",
                   help="directory of histo file", default='/data/datasets/CTA/DarkRun/20161214/')
@@ -82,7 +83,8 @@ options.file_list = options.file_list.split(',')
 options.scan_level = [int(level) for level in options.scan_level.split(',')]
 if len(options.scan_level)==3:
     options.scan_level=np.arange(options.scan_level[0],options.scan_level[1]+options.scan_level[2],options.scan_level[2])
-
+else:
+    options.scan_level = np.array(options.scan_level)
 # Prepare the mpe histograms
 mpes = histogram(bin_center_min=1950., bin_center_max=4095., bin_width=1.,
                        data_shape=(options.scan_level.shape+(1296,)),

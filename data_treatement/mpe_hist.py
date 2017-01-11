@@ -48,12 +48,14 @@ def run(hists, options, peak_positions=None):
                 peak = np.argmax(data[0], axis=1)
                 if type(peak_positions).__name__ == 'ndarray' :
                     peak = np.argmax(peak_positions,axis=1)
+
+                index_max = (np.arange(0, data[0].shape[0]), peak,)
+                '''
                 peak_m1 =  peak - 1
                 peak_m1[peak_m1<0]=0
                 peak_p1 =  peak + 1
                 peak_p1[peak_p1>49]=49
 
-                index_max = (np.arange(0, data[0].shape[0]), peak,)
                 index_max_m1 = (np.arange(0, data[0].shape[0]), peak_m1,)
                 index_max_p1 = (np.arange(0, data[0].shape[0]), peak_p1,)
                 h = np.append(data[0][index_max].reshape(data[0][index_max].shape+(1,)),
@@ -62,7 +64,8 @@ def run(hists, options, peak_positions=None):
                               data[0][index_max_p1].reshape(data[0][index_max_p1].shape + (1,)),axis=1)
 
                 max_value = np.max(h,axis=1)
-                hists[0].fill(max_value, indices=(level,))
+                '''
+                hists[0].fill(data[0][index_max], indices=(level,))
                 # and fill the histos
                 #if hists[0] : hists[0].fill(integration[0], indices=(level,))
                 #if hists[1]: hists[1].fill(max_value, indices=(level,))
