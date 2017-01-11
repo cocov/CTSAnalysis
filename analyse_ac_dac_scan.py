@@ -153,6 +153,7 @@ def show_level(level,hist):
 
 
 show_level(0,mpes)
+
 '''
 #display([peaks])
 
@@ -385,8 +386,5 @@ def display_fitparam_err(hist,param_ind,pix,param_label,range=[0.9,1.1]):
     plt.colorbar()
     plt.show()
 
-#display_fitparam_err(mpes_peaks,2,700,'Error Gain',[0.9,1.1])
-#show_mu(0,mpes_peaks)
-#display_fitparam(mpes_peaks,1,700,'$\mu_{XT}$',[0.5,2.]) #<N(p.e.)>@DAC=x
 display_fitparam(mpes_peaks,2,700,'Gain',[0.9,1.1]) #<N(p.e.)>@DAC=x
 '''
