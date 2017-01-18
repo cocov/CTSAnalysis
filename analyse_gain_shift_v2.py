@@ -48,7 +48,7 @@ def gaussian_sum_fit(x, y, n_peaks):
     y = y[y>0]
     log_func = - np.diff(np.log(y)) / np.diff(x)
     y_err = np.sqrt(y)
-    y_err[y_err==0] = 1
+    #y_err[y_err==0] = 1
 
     threshold = 0.05
     min_dist = 3
@@ -97,6 +97,8 @@ def gaussian_sum_fit_1gain(x, y):
 
     x = x[y > 0]
     y = y[y > 0]
+
+    y_err = np.sqrt(y)
 
     log_func = - np.diff(np.log(y)) / np.diff(x)
 
