@@ -12,6 +12,36 @@ def gaussian(x, sigma, mean, amplitude=1):
 
     return amplitude / np.sqrt(2 * sigma ** 2 * math.pi) * np.exp(-(x - mean) ** 2 / (2 * sigma ** 2))
 
+def gaussian_sum(param, x):
+
+    temp = np.zeros(x.shape)
+
+    param = param.reshape(int(len(param)/3), 3)
+
+    for i in range(param.shape[0]):
+
+        temp += gaussian(x, param[i, 2], param[i, 1], amplitude=param[i, 0])
+
+    return temp
+
+def gaussian_sum_1gain(param, x):
+
+    temp = np.zeros(x.shape)
+
+    baseline = param[0]
+    gain = param[1]
+    sigma_e = param[2]
+    sigma_1 = param[3]
+    amplitudes = param[4:len(param)+1]
+
+    n_peaks = len(amplitudes)
+
+    for i in range(n_peaks):
+        sigma = np.sqrt(sigma_e**2 + i*sigma_1**2)
+        temp += gaussian(x, sigma, baseline + i*gain, amplitude=amplitudes[i])
+
+    return temp
+
 def generalized_poisson(k, mu, mu_xt, amplitude=1):
     if mu_xt < 0 or mu < 0 or k < 0:
 

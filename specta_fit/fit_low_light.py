@@ -148,7 +148,7 @@ def fit_func(p, x):
     n_peak = 40
     for n in range(0, n_peak, 1):
 
-        sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2)  * gain
+        sigma_n = np.sqrt(sigma_e ** 2 + n * sigma_1 ** 2) * gain
 
 
         temp += utils.pdf.generalized_poisson(n, mu, mu_xt) * utils.pdf.gaussian(x , sigma_n, n * gain)
