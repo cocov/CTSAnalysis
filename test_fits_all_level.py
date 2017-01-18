@@ -4,6 +4,7 @@ import utils.pdf
 from specta_fit import fit_dark, fit_low_light, fit_high_light, fit_hv_off
 import matplotlib.pyplot as plt
 import copy
+from kapteyn import kmpfit
 
 def fit_consecutive_hist(hist, levels, pixels, config=None, fit_type=None):
 
@@ -123,32 +124,161 @@ def plot_param(hist, pixel=700, param='mu', error_plot=False):
 
     plt.figure()
     x = 5 * np.arange(0, hist.data.shape[0], 1)
+    mu = np.zeros(x.shape)
+    sigma_mu = np.zeros(x.shape)
+    #x_fit = np.arange(0, 1000, 5)
+    x_fit = x
+    y_fit = np.zeros(len(x_fit))
+    y_fit_max = np.zeros(len(x_fit))
+    y_fit_min = np.zeros(len(x_fit))
+    upper_band = np.zeros(len(x_fit))
+    lower_band = np.zeros(len(x_fit))
+    y_hat = np.zeros(len(x_fit))
+    sig_yi = np.zeros(len(x_fit))
+    sigma_y = np.zeros(len(x_fit))
+    n_sigma = 1
+
     for j in range(hist.fit_result.shape[2]):
 
         param_names = ['$\mu$', '$\mu_{XT}$', 'gain', 'baseline', '$\sigma_e$', '$\sigma_1$', 'amplitude', 'offset']
-        param_units = ['[p.e.]', '[p.e.]', '[ADC/p.e.]', '[ADC]', '[p.e.]', '[p.e.]', '[]', '[ADC]']
+        param_units = ['[p.e.]', '[p.e.]', '[ADC/p.e.]', '[ADC]', '[ADC]', '[ADC]', '[]', '[ADC]']
         plt.subplot(3, 3, j+1)
 
         if error_plot:
+
             y = hist.fit_result[:, pixel, j, 1]
             plt.plot(x, y, label='mpe fit', marker='o')
             plt.ylabel('$\sigma$' + param_names[j] + ' ' + param_units[j])
+
         else:
 
-            y = hist.fit_result[:, pixel, j, 0]
-            yerr = hist.fit_result[:, pixel, j, 1]
-            if j==0:
-                deg = int(4)
-                #param = np.polyfit(x, y, deg=deg, w=1./yerr)
-                #plt.plot(x, np.polyval(param, x), label='polyfit deg : ' + str(deg))
-                #print(param)
+            y = hist.fit_result[:, pixel, j, 0] * (hist.fit_result[:, pixel, 2, 0] if (j==4 or j==5) else 1.)
+            yerr = hist.fit_result[:, pixel, j, 1] * (hist.fit_result[:, pixel, 2, 0] if (j==4 or j==5) else 1.)
 
-            plt.errorbar(x, y, yerr=yerr, label='mpe fit', marker='o', linestyle=('None' if j == 0 else '-'))
+            if j==0:
+
+                mu = y
+                sigma_mu = yerr
+
+                def model(p, x):
+                    p0, p1, p2, p3, p4 = p
+                    return p0 + p1 * x + p2 * x**2 + p3 * x**3 + p4 * x**4
+
+                def residuals(p, data):
+
+                    x, y = data
+                    p0, p1, p2, p3, p4 = p
+                    #return (y - model(p, x))/
+
+                # fit with polyfit and compute symmetric CB
+
+                deg = int(4)
+                param, covariance = np.polyfit(x, y, deg=deg, w=1./yerr, cov=True)
+                param_err = np.sqrt(np.diag(covariance))
+                xx = np.vstack([x_fit ** (deg - i) for i in range(deg + 1)]).T
+                yi = np.dot(xx, param)
+                C_yi = np.dot(xx, np.dot(covariance, xx.T))
+                sig_yi = np.sqrt(np.diag(C_yi))
+                y_fit = np.polyval(param, x_fit)
+                y_fit_max = np.polyval(param + param_err, x_fit)
+                y_fit_min = np.polyval(param - param_err, x_fit)
+
+                # fit with kmpfit module and compute CB
+
+                fit = kmpfit.simplefit(model, param, x, y, err=yerr)
+                dfdp = [np.ones(len(x_fit)), x_fit, x_fit ** 2, x_fit ** 3, x_fit ** 4]
+                #dfdp = [x_fit ** 4, x_fit**3, x_fit**2, x_fit, 1]
+
+                y_hat, upper_band, lower_band = fit.confidence_band(x_fit, dfdp, 0.68, model, abswei=True)
+
+
+                # compute CB
+
+                print(' covar matrix kmpfit', fit.covar)
+                print(' covar matrix polyfit', covariance)
+
+                #fitobj = kmpfit.Fitter(residual=residuals, data=(x, y))
+                #fitobj.fit(params0=param)
+
+                #print("\nFit status kmpfit:")
+                #print("====================")
+                #print("Best-fit parameters:        ", fitobj.params)
+                #print("Asymptotic error:           ", fitobj.xerror)
+                #print("Error assuming red.chi^2=1: ", fitobj.stderr)
+                #print
+                #"Chi^2 min:                  ", fitobj.chi2_min
+                #print
+                #"Reduced Chi^2:              ", fitobj.rchi2_min
+                #print
+                #"Iterations:                 ", fitobj.niter
+                #print
+                #"Number of free pars.:       ", fitobj.nfree
+                #print
+                #"Degrees of freedom:         ", fitobj.dof
+
+                for j in range(len(fit.params)):
+                    for k in range(len(fit.params)):
+
+                        sigma_y +=  dfdp[j] * dfdp[k] * fit.covar[j,k] #covariance[j,k]#
+
+                sigma_y = np.sqrt(sigma_y * fit.rchi2_min)
+
+                #plt.plot(x_fit, y_fit, label='polyfit')
+                plt.plot(x_fit, y_fit_max, label='polyfit + 1 $\sigma$')
+                plt.plot(x_fit, y_fit_min, label='polyfit - 1 $\sigma$')
+                plt.plot(x_fit, y_hat, label='kmpfit')
+                plt.fill_between(x_fit, upper_band, lower_band, alpha=0.5, facecolor='blue', label='kmpfit confidence level')
+                plt.fill_between(x_fit, yi+sig_yi, yi-sig_yi, alpha=0.5, facecolor='red', label='polyfit confidence level')
+                print('param ', param , ' ± ', param_err)
+                print('kmpfit : ', fit.params , ' ± ', fit.xerror)
+
+
+
+
+
+
+            plt.errorbar(x, y, yerr=yerr, label='mpe fit', marker='o', linestyle='None')
             plt.plot()
             plt.ylabel(param_names[j] + ' ' + param_units[j])
             plt.legend(loc='best')
 
     plt.xlabel('DAC')
+
+    plt.figure()
+    plt.plot(y_hat, (upper_band - lower_band) / y_hat / 2., label='kmpfit')
+    plt.plot(y_fit, sig_yi/y_fit, label='polyfit')
+    plt.plot(y_fit, (y_fit_max - y_fit_min)/ y_fit / 2., label='polyfit max-min')
+    plt.plot(mu, sigma_mu / mu, label='from mpe fits')
+    plt.plot(y_fit, 1./np.sqrt(y_fit), label='Poisson')
+    #plt.plot(y_fit, sigma_y / y_fit, label='kpmfit redo')
+    plt.xlabel('$\mu$')
+    plt.ylabel('${\sigma} / {\mu}$')
+    plt.legend(loc='best')
+
+
+    #plt.figure()
+    #plt.errorbar(y_fit, mu, xerr=sig_yi, yerr=sigma_mu)
+    #plt.xlabel('incoming light [p.e.]')
+    #plt.ylabel('measured light [p.e.]')
+    #plt.legend(loc='best')
+
+    plt.figure()
+    plt.errorbar(x, mu, yerr=sigma_mu, label='LED calibration', marker='o', linestyle='None', color='k')
+    plt.plot(x_fit, y_fit, color='r', label='best fit')
+    plt.fill_between(x_fit, y_fit + sig_yi, y_fit - sig_yi, alpha=0.25, facecolor='red', label='1 $\sigma$ confidence level')
+    plt.xlabel('DAC')
+    plt.ylabel('$\mu$ [p.e.]')
+    plt.legend(loc='best')
+
+
+    plt.figure()
+    plt.plot(x_fit, (upper_band - lower_band) / y_hat / 2., label='kmpfit')
+    plt.plot(x_fit, sig_yi / y_fit, label='polyfit')
+    plt.plot(x_fit, (y_fit_max - y_fit_min) / y_fit / 2., label='polyfit max-min')
+    #plt.plot(x_fit, sigma_y / y_fit, label='kpmfit redo')
+    plt.xlabel('DAC')
+    plt.ylabel('${\sigma} / {\mu}$')
+    plt.legend(loc='best')
 
 
 
@@ -181,11 +311,12 @@ if __name__ == '__main__':
     data = np.load('data/new/' + 'mpe_scan_0_195_5_200_600_10.npz')
     hist_new = histogram(data=data['mpes'], bin_centers=data['mpes_bin_centers'])
 
-
-    print(np.average(np.tile(hist_mpe.bin_centers, hist_mpe.data.shape[0]*hist_mpe.data.shape[1]).reshape(hist_mpe.data.shape), weights=hist_mpe.data).shape)
+    limit_low = 40
+    limit_max = 40
+    #print(np.average(np.tile(hist_mpe.bin_centers, hist_mpe.data.shape[0]*hist_mpe.data.shape[1]).reshape(hist_mpe.data.shape), weights=hist_mpe.data).shape)
     levels_hv_off = [0]
-    levels_low = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
-    levels_high = [i for i in range(31, 57, 1)]
+    levels_low = [i for i in range(0, limit_low, 1)]
+    levels_high = [i for i in range(limit_low, limit_max, 1)]
     pixels = [700]
     n_param = 8
 
@@ -200,18 +331,18 @@ if __name__ == '__main__':
     start_param = np.array([[0.5, np.nan], [0.08, np.nan], [5.6, np.nan], [2020, np.nan], [0.07, np.nan], [0.09,np.nan], [3500, np.nan], [0., np.nan]])
     fit_consecutive_hist(hist_hv_off, levels_hv_off, pixels, config=start_param, fit_type='hv_off')
     start_param = hist_hv_off.fit_result[pixels[0]]
-    print(start_param)
-    #fit_consecutive_hist(hist_mpe, levels_low, pixels, config=start_param, fit_type='low_light')
-    fit_consecutive_hist(hist_new, levels_low, pixels, config=start_param, fit_type='low_light')
-    #compute_start_parameter_from_previous_fit(hist_mpe.fit_result, type_param='low_light')
-    #start_param = hist_mpe.fit_result[levels_low[-1], pixels[0]]
-    start_param = hist_new.fit_result[levels_low[-1], pixels[0]]
-    #fit_consecutive_hist(hist_mpe, levels_high, pixels, config=start_param, fit_type='high_light')
-    fit_consecutive_hist(hist_new, levels_high, pixels, config=start_param, fit_type='high_light')
+    #print(start_param)
+    fit_consecutive_hist(hist_mpe, levels_low, pixels, config=start_param, fit_type='low_light')
+    #fit_consecutive_hist(hist_new, levels_low, pixels, config=start_param, fit_type='low_light')
+    compute_start_parameter_from_previous_fit(hist_mpe.fit_result, type_param='low_light')
+    start_param = hist_mpe.fit_result[levels_low[-1], pixels[0]]
+    #start_param = hist_new.fit_result[levels_low[-1], pixels[0]]
+    fit_consecutive_hist(hist_mpe, levels_high, pixels, config=start_param, fit_type='high_light')
+    #fit_consecutive_hist(hist_new, levels_high, pixels, config=start_param, fit_type='high_light')
 
 
-    #plot_param(hist_mpe, pixels[0], param='all', error_plot=False)
-    plot_param(hist_new, pixels[0], param='all', error_plot=False)
+    plot_param(hist_mpe, pixels[0], param='all', error_plot=False)
+    #plot_param(hist_new, pixels[0], param='all', error_plot=False)
     #plot_param(hist_new, pixels[0], param='all', error_plot=True)
     plot_param(hist_mpe, pixels[0], param='all', error_plot=True)
 
@@ -221,13 +352,16 @@ if __name__ == '__main__':
         #hist_mpe.show(which_hist=(level, pixels[0], ), show_fit=True, fit_func=fit_low_light.fit_func)
         #hist_new.show(which_hist=(level, pixels[0], ), show_fit=True, fit_func=fit_low_light.fit_func)
 
-    for level in levels_high:
-        #hist_mpe.show(which_hist=(level, pixels[0], ), show_fit=True, fit_func=fit_low_light.fit_func)
+    for level in levels_low + levels_high:
+        hist_mpe.show(which_hist=(level, pixels[0], ), show_fit=True, fit_func=fit_low_light.fit_func)
+
+        if level==31:
+            print(hist_mpe.fit_result[level, pixels[0]])
         #print(level)
-        try:
-            hist_new.show(which_hist=(level, pixels[0], ), show_fit=True, fit_func=fit_low_light.fit_func)
-        except:
-            print(level)
+        #try:
+        #    hist_new.show(which_hist=(level, pixels[0], ), show_fit=True, fit_func=fit_low_light.fit_func)
+        #except:
+        #    print(level)
 
 
 

@@ -89,6 +89,6 @@ def fit_func(p, x):
     """
 
     [mu, mu_xt, gain, baseline, sigma_e, sigma_1, amplitude, offset] = p
-    sigma = sigma_e
+    sigma = sigma_e * gain
     x = x
-    return amplitude * utils.pdf.gaussian(x, sigma*gain,  mu * (1+mu_xt) * gain + baseline)
+    return amplitude * utils.pdf.gaussian(x, sigma,  mu * (1+mu_xt) * gain + baseline)
