@@ -51,9 +51,12 @@ def generalized_poisson(k, mu, mu_xt, amplitude=1):
             return np.zeros(len(k))
 
     else:
-
+        if k==0:
+           log_k = np.log(1)
+        else:
+           log_k = np.sum(np.log(i) for i in range(1, k))
         #return amplitude * mu * (mu + k * mu_xt) ** (k - 1) * np.exp(-mu - k * mu_xt) / factorial(k)
-        return np.exp(np.log(amplitude) + np.log(mu) + np.log(mu + k * mu_xt)*(k - 1) + (-mu - k * mu_xt) - np.sum([np.log(i) for i in range(k)]))
+        return np.exp(np.log(amplitude) + np.log(mu) + np.log(mu + k * mu_xt)*(k - 1) + (-mu - k * mu_xt) - log_k)
 
 def erlang_compound(x, mu, mu_xt):
     temp = 0
