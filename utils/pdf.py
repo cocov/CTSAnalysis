@@ -43,7 +43,7 @@ def gaussian_sum_1gain(param, x):
     return temp
 
 def generalized_poisson(k, mu, mu_xt, amplitude=1):
-    if mu_xt < 0 or mu < 0 or k < 0:
+    if mu_xt < 0 or mu < 0 or k < 0 or mu_xt>=1:
 
         if isinstance(k, int):
             return 0
@@ -54,7 +54,7 @@ def generalized_poisson(k, mu, mu_xt, amplitude=1):
         if k==0:
            log_k = np.log(1)
         else:
-           log_k = np.sum(np.log(i) for i in range(1, k))
+           log_k = np.sum([np.log(i) for i in range(1, k+1)])
         #return amplitude * mu * (mu + k * mu_xt) ** (k - 1) * np.exp(-mu - k * mu_xt) / factorial(k)
         return np.exp(np.log(amplitude) + np.log(mu) + np.log(mu + k * mu_xt)*(k - 1) + (-mu - k * mu_xt) - log_k)
 
