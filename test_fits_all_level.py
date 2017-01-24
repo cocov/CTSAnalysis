@@ -177,7 +177,7 @@ def plot_param(hist, pixel=700, param='mu', error_plot=False):
                 param, covariance = np.polyfit(x, y, deg=deg, w=1./yerr, cov=True)
                 param_err = np.sqrt(np.diag(covariance))
                 xx = np.vstack([x_fit ** (deg - i) for i in range(deg + 1)]).T
-                yi = np.dot(xx, param)
+                yi = np.dot(xx, param)#
                 C_yi = np.dot(xx, np.dot(covariance, xx.T))
                 sig_yi = np.sqrt(np.diag(C_yi))
                 y_fit = np.polyval(param, x_fit)
