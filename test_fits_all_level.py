@@ -126,8 +126,8 @@ def plot_param(hist, pixel=700, param='mu', error_plot=False):
     x = 5 * np.arange(0, hist.data.shape[0], 1)
     mu = np.zeros(x.shape)
     sigma_mu = np.zeros(x.shape)
-    #x_fit = np.arange(0, 1000, 5)
-    x_fit = x
+    x_fit = np.arange(0, 1000, 5)
+    #x_fit = x
     y_fit = np.zeros(len(x_fit))
     y_fit_max = np.zeros(len(x_fit))
     y_fit_min = np.zeros(len(x_fit))
@@ -146,9 +146,10 @@ def plot_param(hist, pixel=700, param='mu', error_plot=False):
 
         if error_plot:
 
-            y = hist.fit_result[:, pixel, j, 1]
-            plt.plot(x, y, label='mpe fit', marker='o')
-            plt.ylabel('$\sigma$' + param_names[j] + ' ' + param_units[j])
+            y = hist.fit_result[:, pixel, j, 0]
+            y_err = hist.fit_result[:, pixel, j, 1]
+            plt.plot(x, y_err/y, label='data', marker='o', linestyle='None')
+            plt.ylabel('$\sigma$ / ' + param_names[j])
 
         else:
 
@@ -223,24 +224,23 @@ def plot_param(hist, pixel=700, param='mu', error_plot=False):
 
                 sigma_y = np.sqrt(sigma_y * fit.rchi2_min)
 
-                #plt.plot(x_fit, y_fit, label='polyfit')
-                plt.plot(x_fit, y_fit_max, label='polyfit + 1 $\sigma$')
-                plt.plot(x_fit, y_fit_min, label='polyfit - 1 $\sigma$')
-                plt.plot(x_fit, y_hat, label='kmpfit')
-                plt.fill_between(x_fit, upper_band, lower_band, alpha=0.5, facecolor='blue', label='kmpfit confidence level')
-                plt.fill_between(x_fit, yi+sig_yi, yi-sig_yi, alpha=0.5, facecolor='red', label='polyfit confidence level')
+                plt.plot(x_fit, y_fit, label='best fit', color='red')
+                plt.errorbar(x, y, yerr=yerr, label='data', marker='o', linestyle='None')
+                #plt.plot(x_fit, y_fit_max, label='polyfit + 1 $\sigma$')
+                #plt.plot(x_fit, y_fit_min, label='polyfit - 1 $\sigma$')
+                #plt.plot(x_fit, y_hat, label='kmpfit')
+                #plt.fill_between(x_fit, upper_band, lower_band, alpha=0.5, facecolor='blue', label='kmpfit confidence level')
+                plt.fill_between(x_fit, yi+sig_yi, yi-sig_yi, alpha=0.5, facecolor='red', label='confidence level')
+                plt.ylabel(param_names[0] + ' ' + param_units[0])
                 print('param ', param , ' ± ', param_err)
                 print('kmpfit : ', fit.params , ' ± ', fit.xerror)
+                plt.legend(loc='best')
 
+            else:
 
-
-
-
-
-            plt.errorbar(x, y, yerr=yerr, label='mpe fit', marker='o', linestyle='None')
-            plt.plot()
-            plt.ylabel(param_names[j] + ' ' + param_units[j])
-            plt.legend(loc='best')
+                plt.errorbar(x, y, yerr=yerr, label='data', marker='o', linestyle='None')
+                plt.ylabel(param_names[j] + ' ' + param_units[j])
+                plt.legend(loc='best')
 
     plt.xlabel('DAC')
 
@@ -272,9 +272,9 @@ def plot_param(hist, pixel=700, param='mu', error_plot=False):
 
 
     plt.figure()
-    plt.plot(x_fit, (upper_band - lower_band) / y_hat / 2., label='kmpfit')
+    #plt.plot(x_fit, (upper_band - lower_band) / y_hat / 2., label='kmpfit')
     plt.plot(x_fit, sig_yi / y_fit, label='polyfit')
-    plt.plot(x_fit, (y_fit_max - y_fit_min) / y_fit / 2., label='polyfit max-min')
+    #plt.plot(x_fit, (y_fit_max - y_fit_min) / y_fit / 2., label='polyfit max-min')
     #plt.plot(x_fit, sigma_y / y_fit, label='kpmfit redo')
     plt.xlabel('DAC')
     plt.ylabel('${\sigma} / {\mu}$')
@@ -311,7 +311,7 @@ if __name__ == '__main__':
     data = np.load('data/new/' + 'mpe_scan_0_195_5_200_600_10.npz')
     hist_new = histogram(data=data['mpes'], bin_centers=data['mpes_bin_centers'])
 
-    limit_low = 40
+    limit_low = 30
     limit_max = 40
     #print(np.average(np.tile(hist_mpe.bin_centers, hist_mpe.data.shape[0]*hist_mpe.data.shape[1]).reshape(hist_mpe.data.shape), weights=hist_mpe.data).shape)
     levels_hv_off = [0]
@@ -328,7 +328,7 @@ if __name__ == '__main__':
     hist_mpe.fit_result = np.zeros((hist_mpe.data.shape[0], hist_mpe.data.shape[1], n_param, 2))
     hist_new.fit_result = np.zeros((hist_new.data.shape[0], hist_new.data.shape[1], n_param, 2))
 
-    start_param = np.array([[0.5, np.nan], [0.08, np.nan], [5.6, np.nan], [2020, np.nan], [0.07, np.nan], [0.09,np.nan], [3500, np.nan], [0., np.nan]])
+    start_param = np.array([[0.5, np.nan], [0.08, np.nan], [5.6, np.nan], [2020, np.nan], [0.7, np.nan], [0.9,np.nan], [3500, np.nan], [0., np.nan]])
     fit_consecutive_hist(hist_hv_off, levels_hv_off, pixels, config=start_param, fit_type='hv_off')
     start_param = hist_hv_off.fit_result[pixels[0]]
     #print(start_param)
